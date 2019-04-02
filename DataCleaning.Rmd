@@ -1,0 +1,16 @@
+---
+title: "Data Cleaning"
+author: "Lea Collin"
+date: "4/2/2019"
+output: html_document
+---
+
+```{r load_libraries}
+library(data.table)
+```
+
+```{r read_data}
+setwd("~/Columbia/AppliedDS/FinalProject/AppliedDataScienceFinalProject")
+
+all_data <- fread("NYCRealEstateData.csv", verbose = FALSE)
+```
