@@ -7,10 +7,81 @@ output: html_document
 
 ```{r load_libraries}
 library(data.table)
+library(readxl)
 ```
 
-```{r read_data}
-setwd("~/Columbia/AppliedDS/FinalProject/AppliedDataScienceFinalProject")
+```{r functions}
+combine.data <- function(filepath) {
+  setwd("~/Columbia/AppliedDS/FinalProject/AppliedDataScienceFinalProject/Data")
+  all.data <- data.table()
+  types <- rep("text", 20)
+  types <- c(types, "date")
+  
+  master_colnames <- c("BOROUGH", "NEIGHBORHOOD", "BUILDING CLASS CATEGORY", "TAX CLASS AT PRESENT", "BLOCK", "LOT", "EASE-MENT", "BUILDING CLASS AT PRESENT", "ADDRESS",  "APARTMENT NUMBER", "ZIP CODE", "RESIDENTIAL UNITS", "COMMERCIAL UNITS", "TOTAL UNITS", "LAND SQUARE FEET", "GROSS SQUARE FEET", "YEAR BUILT", "TAX CLASS AT TIME OF SALE",  "BUILDING CLASS AT TIME OF SALE", "SALE PRICE", "SALE DATE")
+  
+  con <- file(filepath, "r")
+  while ( TRUE ) {
+    line = readLines(con, n = 1)
+    if ( length(line) == 0 ) {
+      break
+    }
+    print (line)
+    borough.year.sales <- read_excel(line, col_types = types)
+    colnames(borough.year.sales) <- master_colnames
+    borough.year.sales <- borough.year.sales[5:nrow(borough.year.sales),]
+    borough.year.sales <- data.table(borough.year.sales)
+    all.data <- rbindlist(list(all.data, borough.year.sales))
+  }
 
-all_data <- fread("NYCRealEstateData.csv", verbose = FALSE)
+  close(con)
+  return (all.data)
+}
+```
+
+```{r read_all_files}
+setwd("~/Columbia/AppliedDS/FinalProject/AppliedDataScienceFinalProject/Data")
+
+m <- data.table()
+types <- rep("text", 20)
+types <- c(types, "date")
+m_2017 <- read_excel("Data/2017_manhattan.xls", col_types = types)
+colnames(m_2017) <- master_colnames
+m_2017 <- m_2017[5:nrow(m_2017),]
+
+m_2016 <- read_excel("Data/2016_manhattan.xls", col_types = types)
+colnames(m_2016) <- master_colnames
+m_2016 <- m_2016[5:nrow(m_2016),]
+
+m <- rbindlist(list(m, m_2017))
+m <- rbindlist(list(m, m_2016))
+
+m_2017 <- read.xlsx2("Data/2017_manhattan.xls", sheetIndex = 1, startRow = 5)
+m_2017 <- m_2017[!apply(m_2017 == "", 1, all),]
+
+m_2016 <- read.xlsx2("Data/2016_manhattan.xls", sheetIndex = 1, startRow = 5)
+m_2016 <- m_2016[!apply(m_2016 == "", 1, all),]
+colnames(m_2017) <- master_colnames
+colnames(m_2016) <- master_colnames
+
+m <- merge(m_2017, m_2016, all = TRUE)
+
+all.data <- combine.data("dataFiles.txt")
+
+manhattan_2017 <- fread(input = "Data/2017_manhattan.csv", verbose = FALSE, skip = 4, header = FALSE)
+manhattan_2016 <- fread(input = "Data/2016_manhattan.csv", verbose = FALSE, skip = 4, header = FALSE)
+
+
+master_colnames <- c("BOROUGH", "NEIGHBORHOOD", "BUILDING CLASS CATEGORY", "TAX CLASS AT PRESENT", "BLOCK", "LOT", "EASE-MENT", "BUILDING CLASS AT PRESENT", "ADDRESS",  "APARTMENT NUMBER", "ZIP CODE", "RESIDENTIAL UNITS", "COMMERCIAL UNITS", "TOTAL UNITS", "LAND SQUARE FEET", "GROSS SQUARE FEET", "YEAR BUILT", "TAX CLASS AT TIME OF SALE",  "BUILDING CLASS AT TIME OF SALE", "SALE PRICE", "SALE DATE")
+
+colnames(manhattan_2017) <- master_colnames
+colnames(manhattan_2016) <- master_colnames
+
+manhattan_2017 <- manhattan_2017[2:nrow(manhattan_2017),]
+manhattan_2016 <- manhattan_2016[2:nrow(manhattan_2016),]
+
+manhattan <- merge(manhattan_2017, manhattan_2016, all = TRUE)
+```
+
+```{r fix_borough}
+boroughs <- c("Manhattan", "Bronx", "Brooklyn", "Queens", "Staten Island")
 ```
