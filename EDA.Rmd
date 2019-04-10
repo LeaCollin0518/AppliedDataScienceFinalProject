@@ -1,0 +1,113 @@
+---
+title: "Exploratory Data Analysis"
+author: "Lea Collin"
+date: "4/9/2019"
+output: html_document
+---
+
+```{r load_libraries, include = FALSE}
+library(data.table)
+library(tidyverse)
+library(extracat)
+library(lubridate)
+```
+
+```{r load_data}
+all.data <- fread("Data/NYCRealEstateFullData.csv")
+```
+
+```{r functions}
+avg.sale.price.by <- function(data, by.column.names){
+  mean.price <- data[, .(`Avg. Price` = mean(get(sale.price.name), na.rm=TRUE)), by = by.column.names]
+  return (mean.price)
+}
+```
+
+```{r constants}
+old.borough.name <- "BOROUGH"
+borough.name <- "Fixed Borough"
+neighborhood.name <- "NEIGHBORHOOD"
+building.class.name <- "BUILDING CLASS CATEGORY"
+tax.class.name <- "TAX CLASS AT PRESENT"
+block.name <- "BLOCK"
+lot.name <- "LOT"
+easement.name <- "EASE-MENT"
+building.class.present.name <- "BUILDING CLASS AT PRESENT"
+address.name <- "ADDRESS"
+apartment.number.name <- "APARTMENT NUMBER"
+zip.name <- "ZIP CODE"
+residential.name <- "RESIDENTIAL UNITS"
+commercial.name <- "COMMERCIAL UNITS"
+total.units.name <- "TOTAL UNITS"
+land.square.feet.name <- "LAND SQUARE FEET"
+gross.square.feet.name <- "GROSS SQUARE FEET"
+year.built.name <- "YEAR BUILT"
+tax.class.sale.name <- "TAX CLASS AT TIME OF SALE"
+building.class.sale.name <- "BUILDING CLASS AT TIME OF SALE"
+sale.price.name <- "SALE PRICE"
+sale.date.name <- "SALE DATE"
+sale.year.name <- "Sale Year"
+```
+
+```{r, fig.height = 20}
+colSums(is.na(all.data))
+```
+
+```{r inspect_na, fig.height = 15, fig.width = 15}
+visna(all.data, sort = "b")
+```
+
+We see that the most common columns that have missing values are "EASE.MENT" and "APARTMENT NUMBER". Both of these have missing values in more than half of all rows. It is probably safe to get rid of these columns and ignore them both in our exploratory analysis and our machine learning model as they likely do not hold any valuable information with so many missing values. It may have been interesting to look at apartment number, to see how the floor of the apartment (ie floor in the building) affects the apartments price. Otherwise the only other missing valued columns are "TAX CLASS AT PRESENT", "BUILDING CLASS AT PRESENT", "BUILDING CLASS CATEGORY", and "ADDRESS". Address has only 7 missing values in over 1.4 million rows and there are many other columns that indicate the location of these buildings. What is interesting is that whenever Tax Class at Present is missing, so is Building Class at Present. These have the next highest number of missing values, but still only have about 20,000 NA which is not much when compared to the number of rows. 
+
+```{r fix_na}
+all.data$`EASE-MENT` <- NULL
+all.data$`APARTMENT NUMBER` <- NULL
+```
+
+```{r sale_price}
+all.data[get(sale.price.name) == 0, .N]
+```
+
+While looking at the data when we were choosing a dataset, we noticed that some sales prices are listed as 0. The documentation for the data claims:
+
+A \$0 sale indicates that there was a transfer of ownership without a cash consideration. There can be a number of reasons for a $0 sale including transfers of ownership from parents to children. 
+
+It may be interesting to look at what kinds of properties are most common in transfers of ownership with no cash consideration, especially since they make up almost a third of our dataset. For now, however, we will ignore these rows and continue on with our analysis.
+
+```{r no_zero_sales}
+dat <- all.data[get(sale.price.name) > 0]
+```
+
+```{r avg_sale_price_by_year}
+dat <- dat[, `Sale Year` := year(get(sale.date.name))]
+mean.year.price <- avg.sale.price.by(dat, c(sale.year.name))
+setorderv(x = mean.year.price, cols = "Sale Year", order = 1)
+
+year.price.plot <- ggplot(mean.year.price, aes(`Sale Year`, as.integer(`Avg. Price`))) + 
+                   geom_line(size = 1) + geom_point(aes(`Sale Year`,as.integer(`Avg. Price`))) +
+                   xlab("Sale Year") + ylab("Avg. Price") +
+                   scale_x_continuous(breaks = scales::pretty_breaks(length(mean.year.price$`Sale Year`))) +
+                   ggtitle("NYC Avg. Real Estate Price by Year") 
+
+year.price.plot
+```
+
+Though this plot isn't terribly exciting, we do see a huge dip in price from 2007 to 2009, most likely due to the 2008 financial/housing crisis. We could also control these prices for inflation since they are taking into account data over a 14 year range. (will try and do this later)
+
+Let's look at the trends over the years, but now also by borough. 
+
+```{r avg_sale_price_borough}
+mean.year.borough.price <- avg.sale.price.by(dat, c(sale.year.name, borough.name))
+setorderv(x = mean.year.borough.price, cols = "Sale Year", order = 1)
+mean.year.borough.price <- mean.year.borough.price %>% mutate(`Fixed Borough` = forcats::fct_reorder2(`Fixed Borough`, `Sale Year`, `Avg. Price`))
+
+year.borough.price.plot <- ggplot(mean.year.borough.price, aes(`Sale Year`, as.integer(`Avg. Price`), color = `Fixed Borough`)) + 
+                   geom_line(size = 1) + geom_point(aes(`Sale Year`,as.integer(`Avg. Price`))) +
+                   xlab("Sale Year") + ylab("Avg. Price") + labs(color = "Borough") +
+                   scale_x_continuous(breaks = scales::pretty_breaks(length(mean.year.price$`Sale Year`))) +
+                   ggtitle("NYC Avg. Real Estate Price by Borough and Year") 
+
+year.borough.price.plot
+```
+
+Not too surprisingly, Manhattan sales prices are the highest among the five boroughs. In recent years, we have seen Brooklyn becoming more gentrified, and with it, higher real estate prices, as corroborated by this graph. We should note that since this dataset does not only include apartment buildings, that is probably also the reason that we see such high real estate prices in Manhattan, where there are much more large buildings than in Staten Island, for example, a place that is much more residential. What is also interesting to note as that the Manhattan line follows basically the same trend as the overall city trend, likely indicating that most of the data we have is from Manhattan.

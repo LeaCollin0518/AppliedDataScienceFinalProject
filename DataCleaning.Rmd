@@ -84,4 +84,5 @@ all.data <- merge(x = orig.dat, y = borough.map, by = old.borough.name, all.x = 
 ```{r borough_check}
 all.data[, .N, eval(borough.name)]
 all.data[, `Fixed Borough` := as.factor(get(borough.name))]
+write.csv(all.data, file = "Data/NYCRealEstateFullData.csv",row.names=FALSE)
 ```
