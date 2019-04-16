@@ -15,6 +15,7 @@ library(choroplethrZip)
 ```
 
 ```{r load_data}
+setwd("~/Columbia/AppliedDS/FinalProject/AppliedDataScienceFinalProject")
 all.data <- fread("Data/NYCRealEstateFullData.csv")
 ```
 

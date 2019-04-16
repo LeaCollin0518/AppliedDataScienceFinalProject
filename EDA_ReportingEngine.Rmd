@@ -1,0 +1,99 @@
+---
+title: "Final Project Shiny App"
+output: flexdashboard::flex_dashboard
+runtime: shiny
+---
+
+
+```{r setup, include=FALSE}
+library(flexdashboard)
+library(shiny)
+library(rmarkdown)
+library(knitr)
+library(Hmisc)
+library(DT)
+library(lubridate)
+library(choroplethr)
+library(choroplethrZip)
+library(tidyverse)
+library(data.table)
+
+assignInNamespace("cedta.override", c(data.table:::cedta.override,"rmarkdown"), "data.table")
+
+
+opts_chunk$set(echo = FALSE, comment="", warning = FALSE, message = FALSE, tidy.opts=list(width.cutoff=55), tidy = TRUE)
+
+```
+
+```{r load_data}
+setwd("~/Columbia/AppliedDS/FinalProject/AppliedDataScienceFinalProject")
+all.data <- fread("Data/NYCRealEstateFullData.csv", verbose = FALSE)
+```
+
+```{r constants}
+old.borough.name <- "BOROUGH"
+borough.name <- "Fixed Borough"
+neighborhood.name <- "NEIGHBORHOOD"
+building.class.name <- "BUILDING CLASS CATEGORY"
+tax.class.name <- "TAX CLASS AT PRESENT"
+block.name <- "BLOCK"
+lot.name <- "LOT"
+easement.name <- "EASE-MENT"
+building.class.present.name <- "BUILDING CLASS AT PRESENT"
+address.name <- "ADDRESS"
+apartment.number.name <- "APARTMENT NUMBER"
+zip.name <- "ZIP CODE"
+residential.name <- "RESIDENTIAL UNITS"
+commercial.name <- "COMMERCIAL UNITS"
+total.units.name <- "TOTAL UNITS"
+land.square.feet.name <- "LAND SQUARE FEET"
+gross.square.feet.name <- "GROSS SQUARE FEET"
+year.built.name <- "YEAR BUILT"
+tax.class.sale.name <- "TAX CLASS AT TIME OF SALE"
+building.class.sale.name <- "BUILDING CLASS AT TIME OF SALE"
+sale.price.name <- "SALE PRICE"
+sale.date.name <- "SALE DATE"
+sale.year.name <- "Sale Year"
+log.price.name <- "Log Price"
+
+all.data <- all.data[, `Sale Year` := year(get(sale.date.name))]
+year.variables <- unique(all.data[, get(sale.year.name)])
+```
+
+Introduction
+=====================================  
+
+For our final project, we decided to analyze New York City real estate data between 2003 and 2017. The data is linked here: https://www1.nyc.gov/site/finance/taxes/property-annualized-sales-update.page
+
+Click on the tabs to see different reports.
+
+
+Choropleth Map
+=====================================
+
+Row {data-height=500}
+-------------------------------------
+
+```{r choropleth_map}
+inputPanel(
+  selectInput(inputId="year_variable", label = "Select Variable:", choices = sort(year.variables), selected = sort(year.variables)[length(year.variables)])
+)
+
+renderPlot({
+  keep_cols = c(zip.name, sale.price.name)
+  data(zip.regions)
+  zip.prices <- all.data[get(sale.year.name) == input$year_variable, ..keep_cols]
+  zip.prices <- zip.prices[, mean(get(sale.price.name), na.rm = TRUE), by = zip.name]
+  colnames(zip.prices) <- c("region", "value")
+  zip.prices$value <- as.numeric(zip.prices$value)
+  zip.prices$region <- as.character(zip.prices$region)
+  zip.prices <- zip.prices[region %in% zip.regions$region,]
+  zip.prices <- zip.prices[value > 0,]
+  
+  zip_choropleth(zip.prices,
+                 zip_zoom = zip.prices$region,
+                 title       = "2017 Average Sale Price",
+                 legend      = "Average Sale Price")
+  
+})
+```
