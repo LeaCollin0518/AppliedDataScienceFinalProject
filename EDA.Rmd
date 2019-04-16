@@ -2,7 +2,7 @@
 title: "Exploratory Data Analysis"
 author: "Lea Collin"
 date: "4/9/2019"
-output: html_document
+output: pdf_document
 ---
 
 ```{r load_libraries, include = FALSE}
@@ -10,6 +10,8 @@ library(data.table)
 library(tidyverse)
 library(extracat)
 library(lubridate)
+library(choroplethr)
+library(choroplethrZip)
 ```
 
 ```{r load_data}
@@ -47,6 +49,7 @@ building.class.sale.name <- "BUILDING CLASS AT TIME OF SALE"
 sale.price.name <- "SALE PRICE"
 sale.date.name <- "SALE DATE"
 sale.year.name <- "Sale Year"
+log.price.name <- "Log Price"
 ```
 
 ```{r, fig.height = 20}
@@ -66,16 +69,19 @@ all.data$`APARTMENT NUMBER` <- NULL
 
 ```{r sale_price}
 all.data[get(sale.price.name) == 0, .N]
+all.data[get(sale.price.name) < 50000, .N]
 ```
 
 While looking at the data when we were choosing a dataset, we noticed that some sales prices are listed as 0. The documentation for the data claims:
 
 A \$0 sale indicates that there was a transfer of ownership without a cash consideration. There can be a number of reasons for a $0 sale including transfers of ownership from parents to children. 
 
-It may be interesting to look at what kinds of properties are most common in transfers of ownership with no cash consideration, especially since they make up almost a third of our dataset. For now, however, we will ignore these rows and continue on with our analysis.
+It may be interesting to look at what kinds of properties are most common in transfers of ownership with no cash consideration, especially since they make up almost a third of our dataset. Furthermore, there are other "weird" values. Such as values of 1 or 10. We'll take a closer look at the types of buildings that list these as their sale price. For now, we will only look at data that has a price of more than 50,000 and continue with our analysis.
 
 ```{r no_zero_sales}
-dat <- all.data[get(sale.price.name) > 0]
+# also taking the log for future graphing
+all.data <- all.data[, `Log Price` := log(get(sale.price.name))]
+dat <- all.data[get(sale.price.name) > 50000]
 ```
 
 ```{r avg_sale_price_by_year}
@@ -110,4 +116,45 @@ year.borough.price.plot <- ggplot(mean.year.borough.price, aes(`Sale Year`, as.i
 year.borough.price.plot
 ```
 
-Not too surprisingly, Manhattan sales prices are the highest among the five boroughs. In recent years, we have seen Brooklyn becoming more gentrified, and with it, higher real estate prices, as corroborated by this graph. We should note that since this dataset does not only include apartment buildings, that is probably also the reason that we see such high real estate prices in Manhattan, where there are much more large buildings than in Staten Island, for example, a place that is much more residential. What is also interesting to note as that the Manhattan line follows basically the same trend as the overall city trend, likely indicating that most of the data we have is from Manhattan.
+Not too surprisingly, Manhattan sales prices are the highest among the five boroughs. In recent years, we have seen Brooklyn becoming a more sought-after neighborhood which has led to increases in higher real estate prices, as corroborated by this graph. We should note that since this dataset does not only include apartment buildings, that that is probably also the reason that we see such high real estate prices in Manhattan. Manhattan has many more large buildings than, say, Staten Island which is much more residential. What is also interesting to note is that the Manhattan line follows basically the same trend as the overall city trend, likely indicating that most of the data we have is from Manhattan. Finally, for all five boroughs, we see the same decline ine prices from 2007 to 2009 as we did in the overall city trend, though no decline is as noticeable as the one seen in Manhattan.
+
+Now we will look at the distribution of each borough's sale prices over the years. For this static report, we will focus only on 2003 and 2017 and look at the distribution for each borough. In our Shiny application, we will give the user a chance to look at each year, however, this is just too much variable information to show in a static report.
+
+```{r boxplot_borough}
+box.borough.2017 <- dat[get(sale.year.name) == 2017]
+box.borough.2017$`Sale Year` <- as.factor(box.borough.2017$`Sale Year`)
+
+box.borough.2017.plot <- ggplot(box.borough.2017, aes(x = reorder(`Fixed Borough`, -1*`Log Price`, FUN=median), y = `Log Price`)) +
+                    geom_boxplot() +
+                    xlab("Borough") + ylab("Log Sale Price") + ggtitle("2017 by Borough") +
+                    theme(plot.title = element_text(hjust = 0.5))
+
+box.borough.2017.plot
+
+box.borough.2003 <- dat[get(sale.year.name) == 2003]
+box.borough.2003$`Sale Year` <- as.factor(box.borough.2003$`Sale Year`)
+
+box.borough.2003.plot <- ggplot(box.borough.2003, aes(x = reorder(`Fixed Borough`, -1*`Log Price`, FUN=median), y = `Log Price`)) +
+                    geom_boxplot() +
+                    xlab("Borough") + ylab("Log Sale Price") + ggtitle("2003 by Borough") +
+                    theme(plot.title = element_text(hjust = 0.5))
+
+box.borough.2003.plot
+```
+
+```{r choropleth_map}
+keep_cols = c(zip.name, sale.price.name)
+data(zip.regions)
+zip.prices <- dat[get(sale.year.name) == 2017, ..keep_cols]
+zip.prices <- zip.prices[, mean(get(sale.price.name), na.rm = TRUE), by = zip.name]
+colnames(zip.prices) <- c("region", "value")
+zip.prices$value <- as.numeric(zip.prices$value)
+zip.prices$region <- as.character(zip.prices$region)
+zip.prices <- zip.prices[region %in% zip.regions$region,]
+zip.prices <- zip.prices[value > 0,]
+
+zip_choropleth(zip.prices,
+               zip_zoom = zip.prices$region,
+               title       = "2017 Average Sale Price",
+               legend      = "Average Sale Price")
+```
