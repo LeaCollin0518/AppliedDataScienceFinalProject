@@ -1,0 +1,204 @@
+---
+title: "final project_mayur"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r libraries}
+library(dplyr)
+library(plyr)
+library(ggplot2)
+library(tidyverse)
+library(data.table)
+library(DT)
+library(lubridate)
+library(randomForest)
+library(DataExplorer)
+```
+
+```{r read data}
+all.data<-read.csv('NYCRealEstateFullData.csv')
+```
+
+```{r constants}
+old.borough.name <- "BOROUGH"
+neighborhood.name <- "NEIGHBORHOOD"
+building.class.name <- "BUILDING CLASS CATEGORY"
+tax.class.name <- "TAX CLASS AT PRESENT"
+block.name <- "BLOCK"
+lot.name <- "LOT"
+easement.name <- "EASE-MENT"
+building.class.present.name <- "BUILDING CLASS AT PRESENT"
+address.name <- "ADDRESS"
+apartment.number.name <- "APARTMENT NUMBER"
+zip.name <- "ZIP CODE"
+residential.name <- "RESIDENTIAL UNITS"
+commercial.name <- "COMMERCIAL UNITS"
+total.units.name <- "TOTAL UNITS"
+land.square.feet.name <- "LAND SQUARE FEET"
+gross.square.feet.name <- "GROSS SQUARE FEET"
+year.built.name <- "YEAR BUILT"
+tax.class.sale.name <- "TAX CLASS AT TIME OF SALE"
+building.class.sale.name <- "BUILDING CLASS AT TIME OF SALE"
+sale.price.name <- "SALE PRICE"
+sale.date.name <- "SALE DATE"
+```
+
+```{r fix_borough}
+setDT(all.data)
+all.data[, .N, eval(old.borough.name)]
+old.borough.name <- 'BOROUGH'
+borough.name <- "Fixed Borough"
+borough.values <- c("Manhattan", "Bronx", "Brooklyn", "Queens", "Staten Island")
+borough.map <- data.table(BOROUGH = 1:5, `Fixed Borough` = borough.values)
+orig.dat <- all.data
+all.data <- merge(x = orig.dat, y = borough.map, by = old.borough.name, all.x = TRUE, all.y = FALSE)
+```
+
+
+```{r examine data}
+str(all.data) #fix data type of sale.date
+```
+
+```{r fix sale.date}
+all.data$`SALE.DATE`<-ymd(all.data$`SALE.DATE`)    #conversion from factor to date format
+all.data$sale.year<-year(all.data$`SALE.DATE`)   #extracting year from sale date
+all.data$sale.month<-month(all.data$`SALE.DATE`) #extracting months from sale date 
+```
+
+```{r missing data exploration}
+plot_missing(all.data) #100% missing values for Ease.ment, 78% missing values in apartment number (can be removed from analysis)
+```
+
+```{r remove irrelevant columns }
+#removing ease.ment and apartment number from analysis
+all.data<-select(all.data,c(1:6,8,9,11:25))
+#analyzing building class at present 
+summary(all.data$`BUILDING.CLASS.AT.PRESENT`)
+#nyc.copy<-copy(nyc)
+#setDT(nyc.copy)
+#nyc.copy.mean<-nyc.copy[,.("mean"=mean(SALE.PRICE)),BUILDING.CLASS.AT.PRESENT]
+#nyc.copy.mean<-setorderv(nyc.copy.mean,cols = "mean",order = -1)
+
+```
+
+
+```{r analyzing tax class at present and building class at present}
+setDT(all.data)
+all.data.tax.class.na<-all.data[is.na(TAX.CLASS.AT.PRESENT),.SD] #20640 na values
+#option 1: to remove these 20640 values from dataset as most of other variables like land sqr feet are also 0 and also 20640 missing values in building class at present also correspond to these values
+
+#clean dataset
+all.data.clean<-all.data[!is.na(all.data$TAX.CLASS.AT.PRESENT),.SD]
+all.data.clean<-all.data.clean[!is.na(BUILDING.CLASS.CATEGORY),.SD]
+plot_missing(all.data.clean)
+```
+
+```{r correlations}
+cor(all.data.clean$SALE.PRICE,all.data.clean$LAND.SQUARE.FEET) #low correlation doesnt make sense. main reason is lot of 0 values. 
+
+cor(all.data.clean$SALE.PRICE,all.data.clean$GROSS.SQUARE.FEET) 
+```
+
+```{r unusual observations}
+#30% of values in clean dataset are priced 0 
+all.data.clean[SALE.PRICE==0,.N]
+
+#41% of values in clean dataset are priced 0 
+all.data.clean[LAND.SQUARE.FEET==0,.N]
+
+#43% of values are 0
+all.data.clean[GROSS.SQUARE.FEET==0,.N]
+
+```
+
+```{r one family dwellings only}
+setDT(all.data.clean)
+one.family.dwellings<-all.data.clean[BUILDING.CLASS.CATEGORY=="01  ONE FAMILY DWELLINGS",.SD]
+one.family.dwellings.2<-all.data.clean[BUILDING.CLASS.CATEGORY=="01 ONE FAMILY DWELLINGS",.SD]
+one.family<-rbind(one.family.dwellings,one.family.dwellings.2)
+one.family$BUILDING.CLASS.CATEGORY<-droplevels(one.family$BUILDING.CLASS.CATEGORY)
+
+```
+
+
+```{r split into train and test}
+library(caret)
+a<-createDataPartition(one.family$SALE.PRICE,p = 0.70,groups =100,list=FALSE)
+train<-one.family[a,]
+test<-one.family[-a,]
+```
+
+```{r linear regression}
+mod.lm<-lm(`SALE.PRICE`~BOROUGH+`LAND.SQUARE.FEET`+`GROSS.SQUARE.FEET`+`sale.year`+`TOTAL.UNITS`+`RESIDENTIAL.UNITS`+`COMMERCIAL.UNITS`,data=train)
+summary(mod.lm)
+pred.lm<-predict(mod.lm,newdata=test)
+rmse.lm = sqrt(mean((pred.lm-test$SALE.PRICE)^2)); rmse.lm #817453.1
+```
+
+```{r}
+mod.rf<-randomForest(`SALE.PRICE`~BOROUGH+`LAND.SQUARE.FEET`+`GROSS.SQUARE.FEET`+`sale.year`+`TOTAL.UNITS`+`RESIDENTIAL.UNITS`+`COMMERCIAL.UNITS`,data=train,ntree=250)
+summary(mod.rf)
+pred.rf<-predict(mod.rf,newdata=test)
+rmse.rf<-sqrt(mean((pred.rf-test$SALE.PRICE)^2)); rmse.rf  # 690523(250 trees)
+```
+
+```{r one.family.without 0 sale prices}
+one.family.without.zero<-one.family[!SALE.PRICE==0,.SD]
+#splitting
+b<-createDataPartition(one.family.without.zero$SALE.PRICE,p = 0.70,groups =100,list=FALSE)
+trainb<-one.family.without.zero[b,]
+testb<-one.family.without.zero[-b,]
+
+#LINEAR REGRESSION
+mod.lm1<-lm(`SALE.PRICE`~BOROUGH+`LAND.SQUARE.FEET`+`GROSS.SQUARE.FEET`+`sale.year`+`TOTAL.UNITS`+`RESIDENTIAL.UNITS`+`COMMERCIAL.UNITS`+BUILDING.CLASS.CATEGORY,data=trainb)
+summary(mod.lm1)
+pred.lm1<-predict(mod.lm1,newdata=testb)
+rmse.lm1 = sqrt(mean((pred.lm1-testb$SALE.PRICE)^2)); rmse.lm1 #799039.7
+# linear reg without land sqr feet but with year built
+mod.lm2<-lm(`SALE.PRICE`~BOROUGH+`GROSS.SQUARE.FEET`+`sale.year`+`TOTAL.UNITS`+`RESIDENTIAL.UNITS`+`COMMERCIAL.UNITS`+BUILDING.CLASS.CATEGORY+YEAR.BUILT,data=trainb)
+summary(mod.lm2)
+pred.lm2<-predict(mod.lm2,newdata=testb)
+rmse.lm2 = sqrt(mean((pred.lm2-testb$SALE.PRICE)^2)); rmse.lm2 #798254.1
+
+#randomforest
+mod.rf1<-randomForest(`SALE.PRICE`~BOROUGH+`LAND.SQUARE.FEET`+`GROSS.SQUARE.FEET`+`sale.year`+`TOTAL.UNITS`+`RESIDENTIAL.UNITS`+`COMMERCIAL.UNITS`+BUILDING.CLASS.CATEGORY,data=trainb,ntree=250)
+summary(mod.rf1)
+pred.rf1<-predict(mod.rf1,newdata=testb)
+rmse.rf1<-sqrt(mean((pred.rf1-testb$SALE.PRICE)^2)); rmse.rf1  #574887.8 (250 trees)
+
+#randomforest with year built 
+mod.rf2<-randomForest(`SALE.PRICE`~BOROUGH+`LAND.SQUARE.FEET`+`GROSS.SQUARE.FEET`+`sale.year`+`TOTAL.UNITS`+`RESIDENTIAL.UNITS`+`COMMERCIAL.UNITS`+BUILDING.CLASS.CATEGORY+YEAR.BUILT,data=trainb,ntree=250)
+summary(mod.rf2)
+pred.rf2<-predict(mod.rf2,newdata=testb)
+rmse.rf2<-sqrt(mean((pred.rf2-testb$SALE.PRICE)^2)); rmse.rf2  #555013 (250 trees)
+```
+
+
+
+#using all the building class categories: bad idea
+```{r simple linear regression}
+mod_lm<-lm(`SALE.PRICE`~BOROUGH+`LAND.SQUARE.FEET`+`GROSS.SQUARE.FEET`+`sale.year`+`TOTAL.UNITS`+`RESIDENTIAL.UNITS`+`COMMERCIAL.UNITS`,data=train)
+summary(mod_lm)
+pred_lm<-predict(mod_lm,newdata=test)
+rmse_lm = sqrt(mean((pred_lm-test$SALE.PRICE)^2)); rmse_lm #10728827
+```
+
+```{r  a simple random forest model}
+library(randomForest)
+sample.5000<-sample(1:nrow(train),10000)
+sample_rf<-train[sample.1000,]
+mod_rf1<-randomForest(`SALE.PRICE`~BOROUGH+`LAND.SQUARE.FEET`+`GROSS.SQUARE.FEET`+`sale.year`+`TOTAL.UNITS`+`RESIDENTIAL.UNITS`+`COMMERCIAL.UNITS`+BLOCK,data=sample_rf,ntree=100)
+summary(mod_rf1)
+pred_rf<-predict(mod_rf1,newdata=test)
+rmse_rf<-sqrt(mean((pred_rf-test$SALE.PRICE)^2)); rmse_rf #10256048
+```
+
+```{r analyzing these two similar prop types}
+one.family.without.zero[BUILDING.CLASS.CATEGORY=="01  ONE FAMILY DWELLINGS",.("Mean"=mean(SALE.PRICE))] #595488
+one.family.without.zero[BUILDING.CLASS.CATEGORY=="01 ONE FAMILY DWELLINGS",.("Mean"=mean(SALE.PRICE))]  #664471.6
+```
+
