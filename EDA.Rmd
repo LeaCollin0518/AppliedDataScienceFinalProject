@@ -24,6 +24,27 @@ avg.sale.price.by <- function(data, by.column.names){
   mean.price <- data[, .(`Avg. Price` = mean(get(sale.price.name), na.rm=TRUE)), by = by.column.names]
   return (mean.price)
 }
+
+graph.choropleth <- function(data, year){
+  keep_cols = c(zip.name, sale.price.name)
+  data(zip.regions)
+  zip.prices <- data[get(sale.year.name) == year, ..keep_cols]
+  zip.prices <- zip.prices[, mean(get(sale.price.name), na.rm = TRUE), by = zip.name]
+  colnames(zip.prices) <- c("region", "value")
+  zip.prices$value <- as.numeric(zip.prices$value)
+  zip.prices$region <- as.character(zip.prices$region)
+  zip.prices <- zip.prices[region %in% zip.regions$region,]
+  zip.prices <- zip.prices[value > 0,]
+  
+  plot.title <- c(year, " Average Sale Price by Zip Code")
+  plot.title <- paste(plot.title, collapse="")
+  
+  choro.graph <- zip_choropleth(zip.prices,
+                 zip_zoom = zip.prices$region,
+                 title       =  plot.title,
+                 legend      = "Average Sale Price")
+  return (choro.graph)
+}
 ```
 
 ```{r constants}
@@ -51,6 +72,7 @@ sale.price.name <- "SALE PRICE"
 sale.date.name <- "SALE DATE"
 sale.year.name <- "Sale Year"
 log.price.name <- "Log Price"
+building.class.first.letter <- "Building Class First Letter"
 ```
 
 ```{r, fig.height = 20}
@@ -81,12 +103,13 @@ It may be interesting to look at what kinds of properties are most common in tra
 
 ```{r no_zero_sales}
 # also taking the log for future graphing
-all.data <- all.data[, `Log Price` := log(get(sale.price.name))]
+all.data[, `Log Price` := log(get(sale.price.name))]
+all.data[, `Sale Year` := year(get(sale.date.name))]
 dat <- all.data[get(sale.price.name) > 50000]
 ```
 
 ```{r avg_sale_price_by_year}
-dat <- dat[, `Sale Year` := year(get(sale.date.name))]
+
 mean.year.price <- avg.sale.price.by(dat, c(sale.year.name))
 setorderv(x = mean.year.price, cols = "Sale Year", order = 1)
 
@@ -144,18 +167,25 @@ box.borough.2003.plot
 ```
 
 ```{r choropleth_map}
-keep_cols = c(zip.name, sale.price.name)
-data(zip.regions)
-zip.prices <- dat[get(sale.year.name) == 2017, ..keep_cols]
-zip.prices <- zip.prices[, mean(get(sale.price.name), na.rm = TRUE), by = zip.name]
-colnames(zip.prices) <- c("region", "value")
-zip.prices$value <- as.numeric(zip.prices$value)
-zip.prices$region <- as.character(zip.prices$region)
-zip.prices <- zip.prices[region %in% zip.regions$region,]
-zip.prices <- zip.prices[value > 0,]
+graph.choropleth(dat, 2017)
+```
 
-zip_choropleth(zip.prices,
-               zip_zoom = zip.prices$region,
-               title       = "2017 Average Sale Price",
-               legend      = "Average Sale Price")
+As we can see, the range of values for sale price is enormous. Some buildings are up to 2 billion dollars! This is because the dataset includes any sale of property. Some properties are one-family homes or walk-up apartments while others are office buildings or retail buildings. We can look at the distribution of the data furthermore by building class code. The class codes can be found here: https://www1.nyc.gov/assets/finance/jump/hlpbldgcode.html. The building class at present and building class at time of sale use these building class codes. First, let's take a look at how many rows there are where these codes are not the same.
+
+```{r unequal_class_code_num}
+all.data[get(building.class.present.name) != get(building.class.sale.name), .N]
+```
+
+There are `r all.data[get(building.class.present.name) != get(building.class.sale.name), .N]` rows where the building class at present and the building class at time of sale are not the same. For the purposes of visualization and subsetting, we will use the building class at time of sale since we care about the sale price of the property. Now, similar builidng types start with the same letter. For example, building class codes starting with A are one-family homes whereas building class codes starting with B are two-family homes. This means that we can create a new column that is simply the first letter of the building class at the time of sale and this will help us subset our data for visualizations. Based on the documentation, the residential building codes start with: A, B, C, D, and some R. The R codes that don't seem residential are: RA, RB, RG, RH, RK, RP, RS, RT, R0, and R5. Below, we make another data.table with only the residential building class codes at time of sale. 
+
+```{r building_code}
+all.data[, `Building Class First Letter` := substr(get(building.class.sale.name), 1, 1)]
+dat <- all.data[get(sale.price.name) > 50000]
+residential.codes <- c("A", "B", "C", "D", "RR", "R1", "R2", "R3", "R4", "R6", "R7", "R8", "R9")
+residential.properties <- dat[get(building.class.first.letter) %in% residential.codes,]
+```
+
+```{r residential_choropleth}
+graph.choropleth(residential.properties, 2017)
+graph.choropleth(residential.properties, 2009)
 ```

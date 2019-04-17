@@ -58,6 +58,7 @@ log.price.name <- "Log Price"
 
 all.data <- all.data[, `Sale Year` := year(get(sale.date.name))]
 year.variables <- unique(all.data[, get(sale.year.name)])
+dat <- all.data[get(sale.price.name) > 50000]
 ```
 
 Introduction
@@ -71,28 +72,32 @@ Click on the tabs to see different reports.
 Choropleth Map
 =====================================
 
-Row {data-height=500}
+Row {data-height=800}
 -------------------------------------
 
 ```{r choropleth_map}
+# maybe include two charts so that you can have a side-by-side comparison
+
 inputPanel(
-  selectInput(inputId="year_variable", label = "Select Variable:", choices = sort(year.variables), selected = sort(year.variables)[length(year.variables)])
+  selectInput(inputId="year_variable", label = "Select Year:", choices = sort(year.variables), selected = sort(year.variables)[length(year.variables)])
 )
 
 renderPlot({
   keep_cols = c(zip.name, sale.price.name)
   data(zip.regions)
-  zip.prices <- all.data[get(sale.year.name) == input$year_variable, ..keep_cols]
+  zip.prices <- dat[get(sale.year.name) == input$year_variable, ..keep_cols]
   zip.prices <- zip.prices[, mean(get(sale.price.name), na.rm = TRUE), by = zip.name]
   colnames(zip.prices) <- c("region", "value")
   zip.prices$value <- as.numeric(zip.prices$value)
   zip.prices$region <- as.character(zip.prices$region)
   zip.prices <- zip.prices[region %in% zip.regions$region,]
   zip.prices <- zip.prices[value > 0,]
+  plot.title <- c(input$year_variable, " Average Sale Price by Zip Code")
+  plot.title <- paste(plot.title, collapse="")
   
   zip_choropleth(zip.prices,
                  zip_zoom = zip.prices$region,
-                 title       = "2017 Average Sale Price",
+                 title       = plot.title,
                  legend      = "Average Sale Price")
   
 })
