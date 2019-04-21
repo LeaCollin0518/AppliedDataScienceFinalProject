@@ -47,6 +47,7 @@ graph.choropleth <- function(data, year){
 }
 ```
 
+
 ```{r constants}
 old.borough.name <- "BOROUGH"
 borough.name <- "Fixed Borough"
@@ -170,7 +171,9 @@ box.borough.2003.plot
 graph.choropleth(dat, 2017)
 ```
 
-As we can see, the range of values for sale price is enormous. Some buildings are up to 2 billion dollars! This is because the dataset includes any sale of property. Some properties are one-family homes or walk-up apartments while others are office buildings or retail buildings. We can look at the distribution of the data furthermore by building class code. The class codes can be found here: https://www1.nyc.gov/assets/finance/jump/hlpbldgcode.html. The building class at present and building class at time of sale use these building class codes. First, let's take a look at how many rows there are where these codes are not the same.
+As we can see, the range of values for sale price is enormous. Some buildings are up to 2 billion dollars! This is because the dataset includes any sale of property. Some properties are one-family homes or walk-up apartments while others are office buildings or retail buildings. The most expensive buildings that are likely office spaces can be found in Downtown or Midtown Manhattan. This makes sense as this is where the corporate side of New York resides.  
+
+We can look at the distribution of the data furthermore by building class code. The class codes can be found here: https://www1.nyc.gov/assets/finance/jump/hlpbldgcode.html. The building class at present and building class at time of sale use these building class codes. First, let's take a look at how many rows there are where these codes are not the same. 
 
 ```{r unequal_class_code_num}
 all.data[get(building.class.present.name) != get(building.class.sale.name), .N]
@@ -187,5 +190,26 @@ residential.properties <- dat[get(building.class.first.letter) %in% residential.
 
 ```{r residential_choropleth}
 graph.choropleth(residential.properties, 2017)
-graph.choropleth(residential.properties, 2009)
 ```
+
+Now that we are only including residential properties, the sales prices are easier to compare between parts of New York. Not surprisingly, many of the most expensive properites are in New York. We see that Staten Island and the Bronx are probably the most affordable. Brooklyn and Queens are also more affordable except the part that are closest to Manhattan are pricier. Even within Manhattan we see trends that make sense. The Upper East side seems to be slightly more expensive than the Upper West side. Midtown isn't terrible whereas Downtown is already getting more expensive. Once we get all the way up to Washington and Inwood Heights, the prices are similar to those in Brooklyn. In the reporting engine, the user can compare different subsets of the data side by side. The user is allowed to choose the year and the building class category to subset by.
+
+Now we'll look at the distribution of the sales prices faceted on different variables, such as year, building class code, borough, or any combination of these. Again, the Shiny app will have all of these options available for the user. For the purposes of this static report, we looked at the residential distributions by borough in 2009 and 2017.
+
+```{r hist_2017_class}
+hist.data <- residential.properties[get(sale.price.name) < 5000000 & get(sale.year.name) == 2017,]
+res_hist <- ggplot(hist.data, aes(x=as.numeric(`SALE PRICE`))) +
+            geom_histogram(color = "blue", fill = "#99CCFF", bins = 75) +
+            facet_grid(`Building Class First Letter` ~ .) + xlab("Sale Price")
+res_hist
+```
+
+```{r hist_2017_borough}
+hist.data <- residential.properties[get(sale.price.name) < 5000000 & get(sale.year.name) == 2017,]
+res_hist <- ggplot(hist.data, aes(x=as.numeric(`SALE PRICE`))) +
+            geom_histogram(color = "blue", fill = "#99CCFF", bins = 75) +
+            facet_grid(`Fixed Borough` ~ .) + xlab("Sale Price")
+res_hist
+```
+
+A problem we are noticing as we look more and more at the data is that it is never clear if the buyer purchased one unit in the property or if they purchased all the units in the property. For example, one residential property sold for around $4 billion and had around 8000 units which is about $500,000 per unit (which would be reasonable). However, other times a property seems to have sold for $53 million for a single unit. The dataset doesn't provide a lot of information on when a single unit within the property was purchased and when the whole building was purchased. Furthermore, sometimes the unit information is not even present.

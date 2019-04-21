@@ -55,10 +55,38 @@ sale.price.name <- "SALE PRICE"
 sale.date.name <- "SALE DATE"
 sale.year.name <- "Sale Year"
 log.price.name <- "Log Price"
+building.class.first.letter <- "Building Class First Letter"
 
 all.data <- all.data[, `Sale Year` := year(get(sale.date.name))]
-year.variables <- unique(all.data[, get(sale.year.name)])
+all.data[, `Building Class First Letter` := substr(get(building.class.sale.name), 1, 1)]
 dat <- all.data[get(sale.price.name) > 50000]
+
+year.variables <- unique(all.data[, get(sale.year.name)])
+first.letter.variables <- unique(all.data[, get(building.class.first.letter)])
+residential.codes <- c("A", "B", "C", "D", "RR", "R1", "R2", "R3", "R4", "R6", "R7", "R8", "R9")
+```
+
+```{r functions}
+graph.choropleth <- function(data, year){
+  keep_cols = c(zip.name, sale.price.name)
+  data(zip.regions)
+  zip.prices <- data[, ..keep_cols]
+  zip.prices <- zip.prices[, mean(get(sale.price.name), na.rm = TRUE), by = zip.name]
+  colnames(zip.prices) <- c("region", "value")
+  zip.prices$value <- as.numeric(zip.prices$value)
+  zip.prices$region <- as.character(zip.prices$region)
+  zip.prices <- zip.prices[region %in% zip.regions$region,]
+  zip.prices <- zip.prices[value > 0,]
+  
+  plot.title <- c(year, " Average Sale Price by Zip Code")
+  plot.title <- paste(plot.title, collapse="")
+  
+  choro.graph <- zip_choropleth(zip.prices,
+                 zip_zoom = zip.prices$region,
+                 title       =  plot.title,
+                 legend      = "Average Sale Price")
+  return (choro.graph)
+}
 ```
 
 Introduction
@@ -72,33 +100,38 @@ Click on the tabs to see different reports.
 Choropleth Map
 =====================================
 
-Row {data-height=800}
+Column {data-width=500}
 -------------------------------------
 
-```{r choropleth_map}
+```{r choropleth_map_1}
 # maybe include two charts so that you can have a side-by-side comparison
 
 inputPanel(
-  selectInput(inputId="year_variable", label = "Select Year:", choices = sort(year.variables), selected = sort(year.variables)[length(year.variables)])
+  selectInput(inputId="year_variable_1", label = "Select Year 1:", choices = sort(year.variables), selected = sort(year.variables)[length(year.variables)]),
+  selectInput(inputId="building_class_type_1", label = "Select Building Class Type 1:", choices = first.letter.variables, selected = residential.codes, multiple = TRUE)
 )
 
 renderPlot({
-  keep_cols = c(zip.name, sale.price.name)
-  data(zip.regions)
-  zip.prices <- dat[get(sale.year.name) == input$year_variable, ..keep_cols]
-  zip.prices <- zip.prices[, mean(get(sale.price.name), na.rm = TRUE), by = zip.name]
-  colnames(zip.prices) <- c("region", "value")
-  zip.prices$value <- as.numeric(zip.prices$value)
-  zip.prices$region <- as.character(zip.prices$region)
-  zip.prices <- zip.prices[region %in% zip.regions$region,]
-  zip.prices <- zip.prices[value > 0,]
-  plot.title <- c(input$year_variable, " Average Sale Price by Zip Code")
-  plot.title <- paste(plot.title, collapse="")
-  
-  zip_choropleth(zip.prices,
-                 zip_zoom = zip.prices$region,
-                 title       = plot.title,
-                 legend      = "Average Sale Price")
-  
+  choropleth.dat <- dat[get(sale.year.name) == input$year_variable_1 & get(building.class.first.letter) %in% input$building_class_type_1,]
+  graph.choropleth(choropleth.dat, input$year_variable_1)
+  # choro.map_
+})
+```
+
+Column {data-width=500}
+-------------------------------------
+
+```{r choropleth_map_2}
+# maybe include two charts so that you can have a side-by-side comparison
+
+inputPanel(
+  selectInput(inputId="year_variable_2", label = "Select Year 2:", choices = sort(year.variables), selected = sort(year.variables)[length(year.variables)-1]),
+  selectInput(inputId="building_class_type_2", label = "Select Building Class Type 2:", choices = first.letter.variables, selected = residential.codes, multiple = TRUE)
+)
+
+renderPlot({
+  choropleth.dat <- dat[get(sale.year.name) == input$year_variable_2 & get(building.class.first.letter) %in% input$building_class_type_2,]
+  graph.choropleth(choropleth.dat, input$year_variable_2)
+  # choro.map
 })
 ```
