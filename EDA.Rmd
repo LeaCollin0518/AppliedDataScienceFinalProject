@@ -213,3 +213,37 @@ res_hist
 ```
 
 A problem we are noticing as we look more and more at the data is that it is never clear if the buyer purchased one unit in the property or if they purchased all the units in the property. For example, one residential property sold for around $4 billion and had around 8000 units which is about $500,000 per unit (which would be reasonable). However, other times a property seems to have sold for $53 million for a single unit. The dataset doesn't provide a lot of information on when a single unit within the property was purchased and when the whole building was purchased. Furthermore, sometimes the unit information is not even present.
+
+#### plot of number of house sales in each borough
+```{r}
+unique(all.data$BOROUGH)
+a <- matrix(0, nrow = 5, ncol = 2)
+colnames(a) <- c('borough', 'number')
+a <- as.data.frame(a)
+a[, 1] <- c("Manhattan", "Bronx", "Brooklyn", "Queens", "Staten Island")
+for (i in 1:5){
+  sub <- all.data[all.data$BOROUGH == i, ]
+  a[i, 2] <- nrow(sub)
+}
+number_borough <- ggplot(data = a, aes(x = borough, y = number)) +
+  geom_bar(stat="identity", width=0.5) + 
+  xlab('Borough')
+```
+
+#### plot of number of house sales in eahc year
+```{r}
+year <- substr(all.data$`SALE DATE`, 1, 4)
+all.data$`SALE YEAR` <- year
+sale_year <- unique(all.data$`SALE YEAR`)
+b <- matrix(0, nrow = length(sale_year), ncol = 2)
+b <- as.data.frame(b)
+colnames(b) <- c('sale year', 'number')
+b$`sale year` <- sale_year
+for (i in 1:length(sale_year)){
+  sub <- all.data[all.data$`SALE YEAR` == sale_year[i], ]
+  b[i, 2] <- nrow(sub)
+}
+number_year <- ggplot(data = b, aes(x = `sale year`, y = number, group=1)) +
+  geom_line() + 
+  xlab('Year')
+```
