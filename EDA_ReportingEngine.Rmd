@@ -28,6 +28,9 @@ opts_chunk$set(echo = FALSE, comment="", warning = FALSE, message = FALSE, tidy.
 ```{r load_data}
 setwd("~/Columbia/AppliedDS/FinalProject/AppliedDataScienceFinalProject")
 all.data <- fread("Data/NYCRealEstateFullData.csv", verbose = FALSE)
+year <- substr(all.data$`SALE DATE`, 1, 4)
+all.data$`SALE YEAR` <- year
+sale_year <- unique(all.data$`SALE YEAR`)
 ```
 
 ```{r constants}
@@ -64,6 +67,7 @@ dat <- all.data[get(sale.price.name) > 50000]
 year.variables <- unique(all.data[, get(sale.year.name)])
 first.letter.variables <- unique(all.data[, get(building.class.first.letter)])
 residential.codes <- c("A", "B", "C", "D", "RR", "R1", "R2", "R3", "R4", "R6", "R7", "R8", "R9")
+borough_name <- c("Manhattan", "Bronx", "Brooklyn", "Queens", "Staten Island")
 ```
 
 ```{r functions}
@@ -135,3 +139,93 @@ renderPlot({
   # choro.map
 })
 ```
+
+Plot of number of sales in each borough
+===================================
+
+
+Row {data-height=500}
+-------------------------------------
+
+```{r respondents}
+inputPanel(
+  selectInput(inputId = "input_year", label = "Select Year:", 
+              choices = c(sale_year, 'All'), selected = 'All')
+)
+
+
+renderPlot({
+  
+  a <- matrix(0, nrow = 5, ncol = 2)
+  colnames(a) <- c('borough', 'number')
+  a <- as.data.frame(a)
+  a[, 1] <- borough_name
+  
+  if (input$input_year == 'All'){
+    for (i in 1:5){
+     sub <- all.data[all.data$BOROUGH == i, ]
+     a[i, 2] <- nrow(sub)
+    }
+    number_borough <- ggplot(data = a, aes(x = borough, y = number)) +
+      geom_bar(stat="identity", width=0.5) + 
+      xlab('Borough')
+    return(number_borough)
+  }else{
+    for (i in 1:5){
+       sub <- all.data[all.data$BOROUGH == i & all.data$`SALE YEAR` == input$input_year, ]
+       a[i, 2] <- nrow(sub)
+    }
+    number_borough <- ggplot(data = a, aes(x = borough, y = number)) +
+      geom_bar(stat = "identity", width = 0.5) + 
+      xlab('Borough')
+    return(number_borough)
+  }
+  
+})
+```
+
+Plot of number of sales in each year
+===================================
+
+
+Row {data-height=500}
+-------------------------------------
+
+```{r}
+inputPanel(
+  selectInput(inputId = "input_borough", label = "Select Borough:", 
+              choices = c(borough_name, 'All'), selected = 'All')
+)
+
+renderPlot({
+  
+  b <- matrix(0, nrow = length(sale_year), ncol = 2)
+  b <- as.data.frame(b)
+  colnames(b) <- c('sale year', 'number')
+  b$`sale year` <- sale_year
+  
+  if (input$input_borough == 'All'){
+    for (i in 1:length(sale_year)){
+      sub <- all.data[all.data$`SALE YEAR` == sale_year[i], ]
+      b[i, 2] <- nrow(sub)
+    }
+    number_year <- ggplot(data = b, aes(x = `sale year`, y = number, group=1)) +
+      geom_line() + 
+      xlab('Year')
+    return(number_year)
+  }else{
+    for (i in 1:length(sale_year)){
+      sub <- all.data[all.data$`SALE YEAR` == sale_year[i] & all.data$BOROUGH == which(input$input_borough == borough_name), ]
+      b[i, 2] <- nrow(sub)
+    }
+    number_year <- ggplot(data = b, aes(x = `sale year`, y = number, group=1)) +
+      geom_line() + 
+      xlab('Year')
+    return(number_year)
+  }
+  
+})
+```
+
+
+
