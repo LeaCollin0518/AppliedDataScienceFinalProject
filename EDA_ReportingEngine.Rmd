@@ -64,6 +64,7 @@ dat <- all.data[get(sale.price.name) > 50000]
 year.variables <- unique(all.data[, get(sale.year.name)])
 first.letter.variables <- unique(all.data[, get(building.class.first.letter)])
 residential.codes <- c("A", "B", "C", "D", "RR", "R1", "R2", "R3", "R4", "R6", "R7", "R8", "R9")
+line.variables <- c(borough.name, building.class.first.letter)
 ```
 
 ```{r functions}
@@ -86,6 +87,11 @@ graph.choropleth <- function(data, year){
                  title       =  plot.title,
                  legend      = "Average Sale Price")
   return (choro.graph)
+}
+
+avg.sale.price.by <- function(data, by.column.names){
+  mean.price <- data[, .(`Avg. Price` = mean(get(sale.price.name), na.rm=TRUE)), by = by.column.names]
+  return (mean.price)
 }
 ```
 
@@ -114,7 +120,6 @@ inputPanel(
 renderPlot({
   choropleth.dat <- dat[get(sale.year.name) == input$year_variable_1 & get(building.class.first.letter) %in% input$building_class_type_1,]
   graph.choropleth(choropleth.dat, input$year_variable_1)
-  # choro.map_
 })
 ```
 
@@ -122,8 +127,6 @@ Column {data-width=500}
 -------------------------------------
 
 ```{r choropleth_map_2}
-# maybe include two charts so that you can have a side-by-side comparison
-
 inputPanel(
   selectInput(inputId="year_variable_2", label = "Select Year 2:", choices = sort(year.variables), selected = sort(year.variables)[length(year.variables)-1]),
   selectInput(inputId="building_class_type_2", label = "Select Building Class Type 2:", choices = first.letter.variables, selected = residential.codes, multiple = TRUE)
@@ -132,6 +135,52 @@ inputPanel(
 renderPlot({
   choropleth.dat <- dat[get(sale.year.name) == input$year_variable_2 & get(building.class.first.letter) %in% input$building_class_type_2,]
   graph.choropleth(choropleth.dat, input$year_variable_2)
-  # choro.map
 })
+```
+
+
+Time-Series 
+=====================================
+
+Row {data-width=800}
+-------------------------------------
+
+```{r line_graph}
+inputPanel(
+  selectInput(inputId="line_variable", label = "Select Variable to Color By:", choices = line.variables, selected = line.variables[1]),
+  selectInput(inputId="line_building_class_type", label = "Select Building Class Type:", choices = first.letter.variables, selected = residential.codes, multiple = TRUE)
+)
+
+renderPlot({
+  if (input$line_variable == building.class.first.letter){
+    sub.dat <- dat[get(building.class.first.letter) %in% input$line_building_class_type,]
+    mean.price <- avg.sale.price.by(sub.dat, c(sale.year.name, input$line_variable))
+    setorderv(x = mean.price, cols = "Sale Year", order = 1)
+    # mean.price <- mean.price %>% mutate(input$line_variable = forcats::fct_reorder2(input$line_variable, `Sale Year`, `Avg. Price`))
+    
+    price.plot <- ggplot(mean.price, aes(`Sale Year`, as.integer(`Avg. Price`), color = `Building Class First Letter`)) + 
+                   geom_line(size = 1) + geom_point(aes(`Sale Year`,as.integer(`Avg. Price`))) +
+                   xlab("Sale Year") + ylab("Avg. Price") + labs(color = "Building Class") +
+                   scale_x_continuous(breaks = scales::pretty_breaks(length(unique(mean.price$`Sale Year`)))) +
+                   ggtitle("NYC Avg. Residential Real Estate Price by Building Class & Year") 
+
+    price.plot
+  }
+  else{
+    sub.dat <- dat
+    mean.price <- avg.sale.price.by(sub.dat, c(sale.year.name, input$line_variable))
+    setorderv(x = mean.price, cols = "Sale Year", order = 1)
+    # mean.price <- mean.price %>% mutate(input$line_variable = forcats::fct_reorder2(input$line_variable, `Sale Year`, `Avg. Price`))
+    
+    price.plot <- ggplot(mean.price, aes(`Sale Year`, as.integer(`Avg. Price`), color = `Fixed Borough`)) + 
+                   geom_line(size = 1) + geom_point(aes(`Sale Year`,as.integer(`Avg. Price`))) +
+                   xlab("Sale Year") + ylab("Avg. Price") + labs(color = "Borough") +
+                   scale_x_continuous(breaks = scales::pretty_breaks(length(unique(mean.price$`Sale Year`)))) +
+                   ggtitle("NYC Avg. Residential Real Estate Price by Borough & Year") 
+
+    price.plot
+  }
+})
+
+
 ```
