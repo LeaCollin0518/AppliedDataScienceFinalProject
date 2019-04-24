@@ -1,0 +1,118 @@
+---
+title: "Project"
+author: "Charles Chen"
+date: "23/04/2019"
+output: slidy_presentation
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE)
+```
+```{r load_libraries, include = FALSE}
+library(devtools)
+library(choroplethr)
+library(data.table)
+library(tidyverse)
+library(lubridate)
+library(choroplethr)
+library(choroplethrZip)
+library(ggplot2)
+```
+
+```{r load_data}
+setwd("/Users/charleschen/Desktop/Applied Data Science/project")
+all.data <- fread("NYCRealEstateFullData.csv", verbose = F)
+```
+
+```{r constants}
+old.borough.name <- "BOROUGH"
+borough.name <- "Fixed Borough"
+neighborhood.name <- "NEIGHBORHOOD"
+building.class.name <- "BUILDING CLASS CATEGORY"
+tax.class.name <- "TAX CLASS AT PRESENT"
+block.name <- "BLOCK"
+lot.name <- "LOT"
+easement.name <- "EASE-MENT"
+building.class.present.name <- "BUILDING CLASS AT PRESENT"
+address.name <- "ADDRESS"
+apartment.number.name <- "APARTMENT NUMBER"
+zip.name <- "ZIP CODE"
+residential.name <- "RESIDENTIAL UNITS"
+commercial.name <- "COMMERCIAL UNITS"
+total.units.name <- "TOTAL UNITS"
+land.square.feet.name <- "LAND SQUARE FEET"
+gross.square.feet.name <- "GROSS SQUARE FEET"
+year.built.name <- "YEAR BUILT"
+tax.class.sale.name <- "TAX CLASS AT TIME OF SALE"
+building.class.sale.name <- "BUILDING CLASS AT TIME OF SALE"
+sale.price.name <- "SALE PRICE"
+sale.date.name <- "SALE DATE"
+sale.year.name <- "Sale Year"
+log.price.name <- "Log Price"
+building.class.first.letter <- "Building Class First Letter"
+borough_name <- c("Manhattan", "Bronx", "Brooklyn", "Queens", "Staten Island")
+```
+
+
+## Plot of Price per Foot in New York City From Region Aspect
+```{r echo = F}
+year <- substr(all.data$`SALE DATE`, 1, 4)
+all.data$`SALE YEAR` <- year
+sub <- all.data[all.data$`SALE PRICE` != 0 & all.data$`GROSS SQUARE FEET` != 0 & all.data$`SALE PRICE` > 500000, ]
+sub$`PRICE PER FEET` <- sub$`SALE PRICE`/sub$`GROSS SQUARE FEET`
+median_price_feet_2 <- as.data.frame(sub[, .(price = median(x = `PRICE PER FEET`, na.rm = T)), keyby = BOROUGH])
+mean_price_feet_2 <- as.data.frame(sub[, .(price = mean(x = `PRICE PER FEET`, na.rm = T)), keyby = BOROUGH])
+price_feet_2 <- rbind(median_price_feet_2, mean_price_feet_2)
+price_feet_2$BOROUGH <- rep(borough_name, 2)
+price_feet_2$Type <- c(rep('median', 5), rep('mean', 5))
+price_feet_2$price <- round(price_feet_2$price, 0)
+
+price_borough <- ggplot(data = price_feet_2, mapping = aes(x = factor(BOROUGH),y = price, fill = Type)) +
+  geom_bar(stat = "identity", position = 'dodge') + 
+  scale_fill_manual(values = c('steelblue', 'orange')) +
+  xlab('Borough') +
+  ylab('Price Per Square Foot') +
+  geom_text(aes(label = price), vjust = 1.5, colour = "white", position = position_dodge(.9), size = 4)
+
+price_borough
+```
+
+## Plot of Price per Foot in New York City From Time Aspect
+```{r echo = F}
+price_feet_2_time <- as.data.frame(sub[, .(price = median(x = `PRICE PER FEET`, na.rm = T)), keyby = `SALE YEAR`])
+for (i in 1:5){
+  a <- sub[BOROUGH == i, .(price = median(x = `PRICE PER FEET`, na.rm = T)), keyby = `SALE YEAR`]
+  price_feet_2_time <- rbind(price_feet_2_time, a)
+}
+price_feet_2_time$Region <- c(rep('Overall', 15), rep('Manhattan', 15), rep('Bronx', 15),
+                              rep('Brooklyn', 15), rep('Queens', 15), rep('Staten Island', 15))
+
+price_year <- ggplot(data = price_feet_2_time, aes(x = `SALE YEAR`, y = price, color = Region, group = Region)) +
+  geom_line(size = 1) + 
+  xlab('Year') +
+  ylab('Price per Square Foot') +
+  scale_fill_brewer(palette = 'Accent')
+
+price_year
+```
+
+## Plot of Number of House Sales in Each Year
+```{r echo = F}
+number_sale_year <- as.data.frame(all.data[, (.N), by = `SALE YEAR`])
+for (i in 1:5){
+  a <- as.data.frame(all.data[BOROUGH == i, (.N), by = `SALE YEAR`])
+  number_sale_year <- rbind(number_sale_year, a)
+}
+number_sale_year$Region <- c(rep('Overall', 15), rep('Manhattan', 15), rep('Bronx', 15),
+                              rep('Brooklyn', 15), rep('Queens', 15), rep('Staten Island', 15))
+colnames(number_sale_year)[2] <- 'Number of Sale'
+
+number_year <- ggplot(data = number_sale_year, aes(x = `SALE YEAR`, y = `Number of Sale`, color = Region, group = Region)) +
+  geom_line(size = 1) + 
+  xlab('Year') +
+  ylab('Number of Sale') +
+  scale_fill_brewer(palette = 'Accent')
+
+number_year
+```
+
