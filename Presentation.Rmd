@@ -1,0 +1,160 @@
+---
+title: "Presentation (Gengyu)"
+author: "Gengyu"
+date: "April 23rd, 2019"
+output: slidy_presentation
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE)
+```
+
+## R Markdown
+
+This is an R Markdown presentation. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
+
+When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document.
+
+## Read and clean the data
+
+```{r load_libraries, include = FALSE}
+library(data.table)
+library(tidyverse)
+#library(extracat)#
+library(lubridate)
+library(choroplethr)
+library(choroplethrZip)
+library(Hmisc)
+```
+
+```{r load_data}
+#setwd("~/Columbia/AppliedDS/FinalProject/AppliedDataScienceFinalProject")#
+all.data <- fread("NYCRealEstateFullData.csv")
+```
+
+```{r constants}
+old.borough.name <- "BOROUGH"
+borough.name <- "Fixed Borough"
+neighborhood.name <- "NEIGHBORHOOD"
+building.class.name <- "BUILDING CLASS CATEGORY"
+tax.class.name <- "TAX CLASS AT PRESENT"
+block.name <- "BLOCK"
+lot.name <- "LOT"
+easement.name <- "EASE-MENT"
+building.class.present.name <- "BUILDING CLASS AT PRESENT"
+address.name <- "ADDRESS"
+apartment.number.name <- "APARTMENT NUMBER"
+zip.name <- "ZIP CODE"
+residential.name <- "RESIDENTIAL UNITS"
+commercial.name <- "COMMERCIAL UNITS"
+total.units.name <- "TOTAL UNITS"
+land.square.feet.name <- "LAND SQUARE FEET"
+gross.square.feet.name <- "GROSS SQUARE FEET"
+year.built.name <- "YEAR BUILT"
+tax.class.sale.name <- "TAX CLASS AT TIME OF SALE"
+building.class.sale.name <- "BUILDING CLASS AT TIME OF SALE"
+sale.price.name <- "SALE PRICE"
+sale.date.name <- "SALE DATE"
+sale.year.name <- "Sale Year"
+log.price.name <- "Log Price"
+building.class.first.letter <- "Building Class First Letter"
+
+residential.group.name <- "RESIDENTIAL UNITS GROUP"
+commercial.group.name <- "COMMERCIAL UNITS GROUP"
+total.units.group.name <- "TOTAL UNIT GROUP"
+land.group.name <- "LAND SQUARE FEET GROUP"
+gross.group.name <- "GROSS SQUARE FEET GROUP"
+
+cuts.total <- c(0, 1, 2, 3, 5)
+cuts.land <- c(0, 100, 1000, 2000, 3000)
+
+all.data[, eval(total.units.group.name) := cut2(x = get(total.units.name), cuts = cuts.total)]
+all.data[, eval(land.group.name) := cut2(x = get(land.square.feet.name), cuts = cuts.land)]
+
+unique.total.units.group <- all.data[, unique(get(total.units.group.name))]
+unique.land.group <- all.data[, unique(get(land.group.name))]
+
+scaled.price.name <- "Scaled Price"
+scaled.total.units <- "Scaled Total Units"
+all.data[, eval(scaled.price.name) := scale(x = get(sale.price.name))]
+all.data[, eval(scaled.total.units) := scale(x = get(total.units.name))]
+```
+
+```{r fix_borough}
+all.data[, .N, eval(old.borough.name)]
+old.borough.name <- 'BOROUGH'
+borough.name <- "Fixed Borough"
+borough.values <- c("Manhattan", "Bronx", "Brooklyn", "Queens", "Staten Island")
+borough.map <- data.table(BOROUGH = 1:5, `Fixed Borough` = borough.values)
+orig.dat <- all.data
+all.data <- merge(x = orig.dat, y = borough.map, by = old.borough.name, all.x = TRUE, all.y = FALSE)
+```
+
+```{r borough_check}
+all.data[, .N, eval(borough.name)]
+all.data[, `Fixed Borough` := as.factor(get(borough.name))]
+```
+
+```{r log_price}
+all.data[, `Log Price` := log(get(sale.price.name))]
+```
+
+```{r fix_na}
+all.data$`EASE-MENT` <- NULL
+all.data$`APARTMENT NUMBER` <- NULL
+```
+
+## The scaled price over total units and land square feet with the original data
+
+```{r scatter_unit_square.feet_1, echo = FALSE}
+ggplot(data = all.data) +
+  geom_point(mapping = aes(x = get(total.units.name), y = get(scaled.price.name))) +
+  labs(title = "Scaled NYC Real Estate Price by Total Units", x = "Total Units", y = "Scaled Sale Price")
+
+ggplot(data = all.data) +
+  geom_point(mapping = aes(x = get(land.square.feet.name), y = get(scaled.price.name))) +
+  labs(title = "Scaled NYC Real Estate Price by Land Square feet", x = "Land Square Feet", y = "Scaled Sale Price")
+```
+
+## The scaled price over total units and land square feet with the subset of data
+
+```{r scatter_unit_square.feet_2, echo = FALSE}
+sub.data.unit.feet <- all.data[get(total.units.name) > 0 & get(total.units.name) < 5000 & get(land.square.feet.name) > 0 & get(land.square.feet.name) < 50000000 & get(sale.price.name) > 50000 & get(sale.price.name) < 5000000, ]
+
+ggplot(data = sub.data.unit.feet) +
+  geom_point(mapping = aes(x = get(total.units.name), y = get(scaled.price.name))) +
+  labs(title = "Scaled NYC Real Estate Price by Total Units", x = "Total Units", y = "Scaled Sale Price")
+
+ggplot(data = sub.data.unit.feet) +
+  geom_point(mapping = aes(x = get(land.square.feet.name), y = get(scaled.price.name))) +
+  labs(title = "Scaled NYC Real Estate Price by Land Square feet", x = "Land Square Feet", y = "Scaled Sale Price")
+```
+
+## Cut total.units and land.square.feet into groups
+
+```{r barplot_unit_square.feet_num, echo = FALSE, warning = FALSE}
+unit.Num <- all.data[, .N, by = total.units.group.name]
+
+ggplot(data = unit.Num, mapping = aes(x = get(total.units.group.name), y = N, fill = get(total.units.group.name))) +
+  geom_bar(stat = "identity") +
+  labs(x = "Group of Total Units", y = "Number of Cases in each Group")
+
+land.Num <- all.data[, .N, by = land.group.name]
+
+ggplot(data = land.Num, mapping = aes(x = get(land.group.name), y = N, fill = get(land.group.name))) +
+  geom_bar(stat = "identity") +
+  labs(x = "Group of Land Square Feet", y = "Number of Cases in each Group")
+```
+
+## Boxplot of the logarithm of price in different groups
+
+```{r boxplot_unit_square.feet_price, warning = FALSE}
+ggplot(data = all.data, aes(x = get(total.units.group.name), y = get(log.price.name), fill = get(total.units.group.name))) +
+  geom_boxplot() +
+  labs(title = "Logarithm of NYC Real Estate Price by Total Units", x = "Group of Total Units", y = "Log Sale Price")
+
+ggplot(data = all.data, aes(x = get(land.group.name), y = get(log.price.name), fill = get(land.group.name))) +
+  geom_boxplot() +
+  labs(title = "Logarithm of NYC Real Estate Price by Land Square Feet", x = "Group of Land Square Feet", y = "Log Sale Price")
+```
+
