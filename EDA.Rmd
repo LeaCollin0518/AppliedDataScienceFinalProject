@@ -136,13 +136,13 @@ dat <- all.data[get(sale.price.name) > 50000]
 ```
 
 ```{r avg_sale_price_by_year}
-
 mean.year.price <- avg.sale.price.by(dat, c(sale.year.name))
 setorderv(x = mean.year.price, cols = "Sale Year", order = 1)
 
 year.price.plot <- ggplot(mean.year.price, aes(`Sale Year`, as.integer(`Avg. Price`))) + 
                    geom_line(size = 1) + geom_point(aes(`Sale Year`,as.integer(`Avg. Price`))) +
                    xlab("Sale Year") + ylab("Avg. Price") +
+                   scale_y_continuous(name="Av. Price", limits=c(500000, 2000000)) +
                    scale_x_continuous(breaks = scales::pretty_breaks(length(mean.year.price$`Sale Year`))) +
                    ggtitle("NYC Avg. Real Estate Price by Year") 
 
