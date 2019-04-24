@@ -135,18 +135,13 @@ all.data[, eval(scaled.total.units) := scale(x = get(total.units.name))]
 
 ## Description of the Data
 
-- The dataset has `r all.data[, .N]` rows and `r length(colnames(all.data))` columns
+- The dataset has `r all.data[, .N]` rows and 22 columns
 - The major important outcome is the sale price
 - Some informative predictors are location (borough and neighborhood) and year of sale
 
-## Missing Data
-```{r missing data exploration, include = FALSE}
-plot_missing(all.data) #100% missing values for Ease.ment, 78% missing values in apartment number (can be removed from analysis)
-```
+## Unexpected Values in Dataset
 
-## Unexpected Values in Dataset (Challenge #1)
-
--  Approach to tackle Challenge 1
+-  Approach to tackle this problem
 - 30% of properties are not priced 
 
 - reason could be change/transfer of ownership (quit claim deed))
@@ -185,14 +180,6 @@ all.data.clean<-select(all.data.clean,c(-7,-10))
 plot_missing(all.data.clean)
 ```
 
-## Occurences by Borough
-
-```{r fix_borough,echo=FALSE}
-setDT(all.data)
-borough.wise.occurences<-all.data[,.N,by = `Fixed Borough`]
-borough.wise.occurences<-setorderv(borough.wise.occurences,order=-1,cols="N")
-datatable(borough.wise.occurences)
-```
 
 ## Average Prices Through the Years
 
@@ -233,8 +220,17 @@ year.borough.price.plot <- ggplot(mean.year.borough.price, aes(`Sale Year`, as.i
 year.borough.price.plot
 ```
 
+## Occurrences by Borough
 
-## Plot of Number of House Sales in Each Year
+```{r fix_borough,echo=FALSE}
+setDT(all.data)
+borough.wise.occurences<-all.data[,.N,by = `Fixed Borough`]
+borough.wise.occurences<-setorderv(borough.wise.occurences,order=-1,cols="N")
+datatable(borough.wise.occurences)
+```
+
+## Sales per Year
+
 ```{r echo = F}
 all.data[, `SALE YEAR` := year(get(sale.date.name))]
 number_sale_year <- as.data.frame(all.data[, (.N), by = `SALE YEAR`])
@@ -249,7 +245,7 @@ number_year <- ggplot(data = number_sale_year, aes(x = `SALE YEAR`, y = `Number 
   geom_line(size = 1) + 
   xlab('Year') +
   ylab('Number of Sale') +
-  scale_fill_brewer(palette = 'Accent')
+  scale_fill_brewer(palette = 'Accent') + scale_x_continuous(breaks = scales::pretty_breaks(length(unique(mean.year.borough.price$`Sale Year`))))
 number_year
 ```
 
@@ -268,36 +264,14 @@ monthly.sales<-setorderv(monthly.sales,order=-1,cols="Mean Sale")
 datatable(monthly.sales)
 ```
 
-## The scaled price over total units and land square feet with the original data
-
-```{r scatter_unit_square.feet_1, echo = FALSE, cache = TRUE}
-ggplot(data = all.data) +
-  geom_point(mapping = aes(x = get(total.units.name), y = get(scaled.price.name))) +
-  labs(title = "Scaled NYC Real Estate Price by Total Units", x = "Total Units", y = "Scaled Sale Price")
-ggplot(data = all.data) +
-  geom_point(mapping = aes(x = get(land.square.feet.name), y = get(scaled.price.name))) +
-  labs(title = "Scaled NYC Real Estate Price by Land Square feet", x = "Land Square Feet", y = "Scaled Sale Price")
-```
-
-## The scaled price over total units and land square feet with the subset of data
-
-```{r scatter_unit_square.feet_2, echo = FALSE, cache = TRUE}
-sub.data.unit.feet <- all.data[get(total.units.name) > 0 & get(total.units.name) < 5000 & get(land.square.feet.name) > 0 & get(land.square.feet.name) < 50000000 & get(sale.price.name) > 50000 & get(sale.price.name) < 5000000, ]
-ggplot(data = sub.data.unit.feet) +
-  geom_point(mapping = aes(x = get(total.units.name), y = get(scaled.price.name))) +
-  labs(title = "Scaled NYC Real Estate Price by Total Units", x = "Total Units", y = "Scaled Sale Price")
-ggplot(data = sub.data.unit.feet) +
-  geom_point(mapping = aes(x = get(land.square.feet.name), y = get(scaled.price.name))) +
-  labs(title = "Scaled NYC Real Estate Price by Land Square feet", x = "Land Square Feet", y = "Scaled Sale Price")
-```
-
-## Cut total.units and land.square.feet into groups
+## Binning Total Units and Land Square Feet 
 
 ```{r barplot_unit_square.feet_num, echo = FALSE, warning = FALSE}
 unit.Num <- all.data[, .N, by = total.units.group.name]
 ggplot(data = unit.Num, mapping = aes(x = get(total.units.group.name), y = N)) +
   geom_bar(stat = "identity", color = "blue", fill = "#99CCFF") +
-  labs(x = "Group of Total Units", y = "Number of Cases in each Group")
+  labs(x = "Group of Total Units", y = "Number of Cases in each Group") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
 land.Num <- all.data[, .N, by = land.group.name]
 ggplot(data = land.Num, mapping = aes(x = get(land.group.name), y = N)) +
   geom_bar(stat = "identity", color = "blue", fill = "#99CCFF") + 
@@ -305,12 +279,13 @@ ggplot(data = land.Num, mapping = aes(x = get(land.group.name), y = N)) +
   theme(axis.text.x = element_text(angle = 45, hjust = 1))
 ```
 
-## Boxplot of the logarithm of price in different groups
+## Inspecting Logarithm of Price
 
 ```{r boxplot_unit_square.feet_price, warning = FALSE}
 ggplot(data = all.data, aes(x = get(total.units.group.name), y = get(log.price.name))) +
   geom_boxplot() +
-  labs(title = "Logarithm of NYC Real Estate Price by Total Units", x = "Group of Total Units", y = "Log Sale Price")
+  labs(title = "Logarithm of NYC Real Estate Price by Total Units", x = "Group of Total Units", y = "Log Sale Price") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
 ggplot(data = all.data, aes(x = get(land.group.name), y = get(log.price.name))) +
   geom_boxplot() +
   labs(title = "Logarithm of NYC Real Estate Price by Land Square Feet", x = "Group of Land Square Feet", y = "Log Sale Price") +
@@ -336,7 +311,8 @@ graph.choropleth(dat, 2017)
 graph.choropleth(residential.properties, 2017)
 ```
 
-## Plot of Price per Foot in New York City From Region Aspect
+## Price per Square Footage by Borough
+
 ```{r echo = F}
 year <- substr(all.data$`SALE DATE`, 1, 4)
 all.data$`SALE YEAR` <- year
@@ -357,7 +333,8 @@ price_borough <- ggplot(data = price_feet_2, mapping = aes(x = factor(BOROUGH),y
 price_borough
 ```
 
-## Plot of Price per Foot in New York City From Time Aspect
+## Price per Square Footage by Year
+
 ```{r echo = F}
 price_feet_2_time <- as.data.frame(sub[, .(price = median(x = `PRICE PER FEET`, na.rm = T)), keyby = `SALE YEAR`])
 for (i in 1:5){
@@ -373,6 +350,23 @@ price_year <- ggplot(data = price_feet_2_time, aes(x = `SALE YEAR`, y = price, c
   scale_fill_brewer(palette = 'Accent')
 price_year
 ```
+
+## Analyzing Neighborhoods in terms of their Sale Prices 
+
+```{r}
+neigh<-all.data.clean[,.N,NEIGHBORHOOD]
+setorderv(neigh,col="N",order=-1)
+
+neigh.50<-neigh[1:50,]
+
+neigh.price<-all.data.clean[,.('mean price'=mean(`SALE PRICE`)),NEIGHBORHOOD]
+setorderv(neigh.price,cols="mean price",order=-1)
+
+neigh.analysis<-merge(neigh,neigh.price,by = neighborhood.name)
+setorderv(neigh.analysis,cols="mean price",order=-1)
+datatable(neigh.analysis)
+```
+
 
 ## Correlations
 
@@ -416,6 +410,30 @@ test<-one.family[-a,]
 train.5000<-set.size(5000,train)
 ```
 
+## Correlation Between Price and Land Square Feet
+
+```{r scatter_unit_square.feet_1, echo = FALSE, cache = TRUE}
+ggplot(data = all.data) +
+  geom_point(mapping = aes(x = get(total.units.name), y = get(scaled.price.name))) +
+  labs(title = "Scaled NYC Real Estate Price by Total Units", x = "Total Units", y = "Scaled Sale Price")
+ggplot(data = all.data) +
+  geom_point(mapping = aes(x = get(land.square.feet.name), y = get(scaled.price.name))) +
+  labs(title = "Scaled NYC Real Estate Price by Land Square feet", x = "Land Square Feet", y = "Scaled Sale Price")
+```
+
+## Correlation on a Subset
+
+```{r scatter_unit_square.feet_2, echo = FALSE, cache = TRUE}
+sub.data.unit.feet <- all.data[get(total.units.name) > 0 & get(total.units.name) < 5000 & get(land.square.feet.name) > 0 & get(land.square.feet.name) < 50000000 & get(sale.price.name) > 50000 & get(sale.price.name) < 5000000, ]
+ggplot(data = sub.data.unit.feet) +
+  geom_point(mapping = aes(x = get(total.units.name), y = get(scaled.price.name))) +
+  labs(title = "Scaled NYC Real Estate Price by Total Units", x = "Total Units", y = "Scaled Sale Price")
+ggplot(data = sub.data.unit.feet) +
+  geom_point(mapping = aes(x = get(land.square.feet.name), y = get(scaled.price.name))) +
+  labs(title = "Scaled NYC Real Estate Price by Land Square feet", x = "Land Square Feet", y = "Scaled Sale Price")
+```
+
+
 ## Linear Regression Model with Selected Variables
 
 ```{r linear regression}
@@ -432,23 +450,6 @@ model.linear.round<-round(model.linear[,-1],3)
 model.linear.final<-cbind(model.linear$Variable,model.linear.round)
 datatable(model.linear.final)
 ```
-
-## Analyzing Neighborhoods in terms of their Sale Prices 
-
-```{r}
-neigh<-all.data.clean[,.N,NEIGHBORHOOD]
-setorderv(neigh,col="N",order=-1)
-
-neigh.50<-neigh[1:50,]
-
-neigh.price<-all.data.clean[,.('mean price'=mean(`SALE PRICE`)),NEIGHBORHOOD]
-setorderv(neigh.price,cols="mean price",order=-1)
-
-neigh.analysis<-merge(neigh,neigh.price,by = neighborhood.name)
-setorderv(neigh.analysis,cols="mean price",order=-1)
-datatable(neigh.analysis)
-```
-
 
 
 ## Implementation
