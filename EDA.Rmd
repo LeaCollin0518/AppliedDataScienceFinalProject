@@ -2,21 +2,24 @@
 title: "Exploratory Data Analysis"
 author: "Lea Collin"
 date: "4/9/2019"
-output: pdf_document
+output:
+  html_document:
+    df_print: paged
 ---
 
 ```{r load_libraries, include = FALSE}
 library(data.table)
 library(tidyverse)
-library(extracat)
+#library(extracat)#
 library(lubridate)
 library(choroplethr)
-library(choroplethrZip)
+#library(choroplethrZip)#
+library(Hmisc)
 ```
 
 ```{r load_data}
-setwd("~/Columbia/AppliedDS/FinalProject/AppliedDataScienceFinalProject")
-all.data <- fread("Data/NYCRealEstateFullData.csv")
+#setwd("~/Columbia/AppliedDS/FinalProject/AppliedDataScienceFinalProject")#
+all.data <- fread("NYCRealEstateFullData.csv")
 ```
 
 ```{r functions}
@@ -24,7 +27,6 @@ avg.sale.price.by <- function(data, by.column.names){
   mean.price <- data[, .(`Avg. Price` = mean(get(sale.price.name), na.rm=TRUE)), by = by.column.names]
   return (mean.price)
 }
-
 graph.choropleth <- function(data, year){
   keep_cols = c(zip.name, sale.price.name)
   data(zip.regions)
@@ -45,7 +47,6 @@ graph.choropleth <- function(data, year){
                  legend      = "Average Sale Price")
   return (choro.graph)
 }
-
 line.plot <- function(data, facet_variable = ''){
   if (facet_variable != ''){
     mean.price <- avg.sale.price.by(data = data, c(sale.year.name))
@@ -56,7 +57,6 @@ line.plot <- function(data, facet_variable = ''){
                    scale_x_continuous(breaks = scales::pretty_breaks(length(mean.price$`Sale Year`))) +
                    ggtitle("NYC Avg. Real Estate Price by Year") 
     return (price.plot)
-
   }
   else{
     mean.price <- avg.sale.price.by(data, c(sale.year.name, facet_variable))
@@ -98,15 +98,33 @@ sale.price.name <- "SALE PRICE"
 sale.date.name <- "SALE DATE"
 sale.year.name <- "Sale Year"
 log.price.name <- "Log Price"
+sale.month<-"SALE MONTH"
+sale.year<-"SALE YEAR"
 building.class.first.letter <- "Building Class First Letter"
+year.built.name <- "YEAR BUILT"
+borough_name <- c("Manhattan", "Bronx", "Brooklyn", "Queens", "Staten Island")
+residential.group.name <- "RESIDENTIAL UNITS GROUP"
+commercial.group.name <- "COMMERCIAL UNITS GROUP"
+total.units.group.name <- "TOTAL UNIT GROUP"
+land.group.name <- "LAND SQUARE FEET GROUP"
+gross.group.name <- "GROSS SQUARE FEET GROUP"
+cuts.total <- c(0, 1, 2, 3, 5)
+cuts.land <- c(0, 100, 1000, 2000, 3000)
+all.data[, eval(total.units.group.name) := cut2(x = get(total.units.name), cuts = cuts.total)]
+all.data[, eval(land.group.name) := cut2(x = get(land.square.feet.name), cuts = cuts.land)]
+unique.total.units.group <- all.data[, unique(get(total.units.group.name))]
+unique.land.group <- all.data[, unique(get(land.group.name))]
+scaled.price.name <- "Scaled Price"
+scaled.total.units <- "Scaled Total Units"
+all.data[, eval(scaled.price.name) := scale(x = get(sale.price.name))]
+all.data[, eval(scaled.total.units) := scale(x = get(total.units.name))]
+all.data[, `Log Price` := log(get(sale.price.name))]
 ```
+
+
 
 ```{r, fig.height = 20}
 colSums(is.na(all.data))
-```
-
-```{r inspect_na, fig.height = 15, fig.width = 15}
-visna(all.data, sort = "b")
 ```
 
 We see that the most common columns that have missing values are "EASE.MENT" and "APARTMENT NUMBER". Both of these have missing values in more than half of all rows. It is probably safe to get rid of these columns and ignore them both in our exploratory analysis and our machine learning model as they likely do not hold any valuable information with so many missing values. It may have been interesting to look at apartment number, to see how the floor of the apartment (ie floor in the building) affects the apartments price. Otherwise the only other missing valued columns are "TAX CLASS AT PRESENT", "BUILDING CLASS AT PRESENT", "BUILDING CLASS CATEGORY", and "ADDRESS". Address has only 7 missing values in over 1.4 million rows and there are many other columns that indicate the location of these buildings. What is interesting is that whenever Tax Class at Present is missing, so is Building Class at Present. These have the next highest number of missing values, but still only have about 20,000 NA which is not much when compared to the number of rows. 
@@ -136,16 +154,13 @@ dat <- all.data[get(sale.price.name) > 50000]
 ```
 
 ```{r avg_sale_price_by_year}
-
 mean.year.price <- avg.sale.price.by(dat, c(sale.year.name))
 setorderv(x = mean.year.price, cols = "Sale Year", order = 1)
-
 year.price.plot <- ggplot(mean.year.price, aes(`Sale Year`, as.integer(`Avg. Price`))) + 
                    geom_line(size = 1) + geom_point(aes(`Sale Year`,as.integer(`Avg. Price`))) +
                    xlab("Sale Year") + ylab("Avg. Price") +
                    scale_x_continuous(breaks = scales::pretty_breaks(length(mean.year.price$`Sale Year`))) +
                    ggtitle("NYC Avg. Real Estate Price by Year") 
-
 year.price.plot
 ```
 
@@ -153,19 +168,7 @@ Though this plot isn't terribly exciting, we do see a huge dip in price from 200
 
 Let's look at the trends over the years, but now also by borough. 
 
-```{r avg_sale_price_borough}
-mean.year.borough.price <- avg.sale.price.by(dat, c(sale.year.name, borough.name))
-setorderv(x = mean.year.borough.price, cols = "Sale Year", order = 1)
-mean.year.borough.price <- mean.year.borough.price %>% mutate(`Fixed Borough` = forcats::fct_reorder2(`Fixed Borough`, `Sale Year`, `Avg. Price`))
 
-year.borough.price.plot <- ggplot(mean.year.borough.price, aes(`Sale Year`, as.integer(`Avg. Price`), color = `Fixed Borough`)) + 
-                   geom_line(size = 1) + geom_point(aes(`Sale Year`,as.integer(`Avg. Price`))) +
-                   xlab("Sale Year") + ylab("Avg. Price") + labs(color = "Borough") +
-                   scale_x_continuous(breaks = scales::pretty_breaks(length(unique(mean.year.borough.price$`Sale Year`)))) +
-                   ggtitle("NYC Avg. Real Estate Price by Borough and Year") 
-
-year.borough.price.plot
-```
 
 Not too surprisingly, Manhattan sales prices are the highest among the five boroughs. In recent years, we have seen Brooklyn becoming a more sought-after neighborhood which has led to increases in higher real estate prices, as corroborated by this graph. We should note that since this dataset does not only include apartment buildings, that that is probably also the reason that we see such high real estate prices in Manhattan. Manhattan has many more large buildings than, say, Staten Island which is much more residential. What is also interesting to note is that the Manhattan line follows basically the same trend as the overall city trend, likely indicating that most of the data we have is from Manhattan. Finally, for all five boroughs, we see the same decline ine prices from 2007 to 2009 as we did in the overall city trend, though no decline is as noticeable as the one seen in Manhattan.
 
@@ -181,13 +184,11 @@ residential.properties <- dat[get(building.class.first.letter) %in% residential.
 mean.year.code.price <- avg.sale.price.by(residential.properties, c(sale.year.name, building.class.first.letter))
 setorderv(x = mean.year.code.price, cols = "Sale Year", order = 1)
 mean.year.code.price <- mean.year.code.price %>% mutate(`Building Class First Letter` = forcats::fct_reorder2(`Building Class First Letter`, `Sale Year`, `Avg. Price`)) # for coloring
-
 year.code.price.plot <- ggplot(mean.year.code.price, aes(`Sale Year`, as.integer(`Avg. Price`), color = `Building Class First Letter`)) + 
                    geom_line(size = 1) + geom_point(aes(`Sale Year`,as.integer(`Avg. Price`))) +
                    xlab("Sale Year") + ylab("Avg. Price") + labs(color = "Building Class") +
                    scale_x_continuous(breaks = scales::pretty_breaks(length(unique(mean.year.code.price$`Sale Year`)))) +
                    ggtitle("NYC Avg.Residential Real Estate Price by Class Code and Year") 
-
 year.code.price.plot
 ```
 
@@ -200,27 +201,22 @@ Now we will look at the distribution of each borough's sale prices over the year
 ```{r boxplot_borough}
 box.borough.2017 <- dat[get(sale.year.name) == 2017]
 box.borough.2017$`Sale Year` <- as.factor(box.borough.2017$`Sale Year`)
-
 box.borough.2017.plot <- ggplot(box.borough.2017, aes(x = reorder(`Fixed Borough`, -1*`Log Price`, FUN=median), y = `Log Price`)) +
                     geom_boxplot() +
                     xlab("Borough") + ylab("Log Sale Price") + ggtitle("2017 by Borough") +
                     theme(plot.title = element_text(hjust = 0.5))
-
 box.borough.2017.plot
-
 box.borough.2003 <- dat[get(sale.year.name) == 2003]
 box.borough.2003$`Sale Year` <- as.factor(box.borough.2003$`Sale Year`)
-
 box.borough.2003.plot <- ggplot(box.borough.2003, aes(x = reorder(`Fixed Borough`, -1*`Log Price`, FUN=median), y = `Log Price`)) +
                     geom_boxplot() +
                     xlab("Borough") + ylab("Log Sale Price") + ggtitle("2003 by Borough") +
                     theme(plot.title = element_text(hjust = 0.5))
-
 box.borough.2003.plot
 ```
 
 ```{r choropleth_map}
-graph.choropleth(dat, 2017)
+#graph.choropleth(dat, 2017)#
 ```
 
 As we can see, the range of values for sale price is enormous. Some areas have buildings with an average price of $2.2 billion! This is because the dataset includes any sale of property. Some properties are one-family homes or walk-up apartments while others are office buildings or retail buildings. The most expensive buildings that are likely office spaces can be found in Downtown or Midtown Manhattan. This makes sense as this is where the corporate side of New York resides.  
@@ -240,7 +236,7 @@ residential.properties <- dat[get(building.class.first.letter) %in% residential.
 ```
 
 ```{r residential_choropleth}
-graph.choropleth(residential.properties, 2017)
+#graph.choropleth(residential.properties, 2017)#
 ```
 
 Now that we are only including residential properties, the sales prices are easier to compare between parts of New York. Not surprisingly, many of the most expensive properites are in New York. We see that Staten Island and the Bronx are probably the most affordable. Brooklyn and Queens are also more affordable except the part that are closest to Manhattan are pricier. Even within Manhattan we see trends that make sense. The Upper East side seems to be slightly more expensive than the Upper West side. Midtown isn't terrible whereas Downtown is already getting more expensive. Once we get all the way up to Washington and Inwood Heights, the prices are similar to those in Brooklyn. In the reporting engine, the user can compare different subsets of the data side by side. The user is allowed to choose the year and the building class category to subset by.
@@ -264,3 +260,86 @@ res_hist
 ```
 
 A problem we are noticing as we look more and more at the data is that it is never clear if the buyer purchased one unit in the property or if they purchased all the units in the property. For example, one residential property sold for around $4 billion and had around 8000 units which is about $500,000 per unit (which would be reasonable). However, other times a property seems to have sold for $53 million for a single unit. The dataset doesn't provide a lot of information on when a single unit within the property was purchased and when the whole building was purchased. Furthermore, sometimes the unit information is not even present.
+
+## Binning Total Units and Land Square Feet 
+
+```{r barplot_unit_square.feet_num, echo = FALSE, warning = FALSE}
+unit.Num <- all.data[, .N, by = total.units.group.name]
+ggplot(data = unit.Num, mapping = aes(x = get(total.units.group.name), y = N)) +
+  geom_bar(stat = "identity", color = "blue", fill = "#99CCFF") +
+  labs(x = "Group of Total Units", y = "Number of Cases in each Group") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+land.Num <- all.data[, .N, by = land.group.name]
+ggplot(data = land.Num, mapping = aes(x = get(land.group.name), y = N)) +
+  geom_bar(stat = "identity", color = "blue", fill = "#99CCFF") + 
+  labs(x = "Group of Land Square Feet", y = "Number of Cases in each Group") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+```
+
+## Inspecting Logarithm of Price
+
+```{r boxplot_unit_square.feet_price, warning = FALSE}
+ggplot(data = dat, aes(x = get(total.units.group.name), y = get(log.price.name))) +
+  geom_boxplot() +
+  labs(title = "Logarithm of NYC Real Estate Price by Total Units", x = "Group of Total Units", y = "Log Sale Price") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+ggplot(data = dat, aes(x = get(land.group.name), y = get(log.price.name))) +
+  geom_boxplot() +
+  labs(title = "Logarithm of NYC Real Estate Price by Land Square Feet", x = "Group of Land Square Feet", y = "Log Sale Price") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+```
+
+## Correlation Between Price and Land Square Feet
+
+```{r scatter_unit_square.feet_1, echo = FALSE, cache = TRUE}
+ggplot(data = dat) +
+  geom_point(mapping = aes(x = get(total.units.name), y = get(scaled.price.name))) +
+  labs(title = "Scaled NYC Real Estate Price by Total Units", x = "Total Units", y = "Scaled Sale Price")
+ggplot(data = dat) +
+  geom_point(mapping = aes(x = get(land.square.feet.name), y = get(scaled.price.name))) +
+  labs(title = "Scaled NYC Real Estate Price by Land Square feet", x = "Land Square Feet", y = "Scaled Sale Price")
+```
+
+## Correlation on a Subset
+
+```{r scatter_unit_square.feet_2, echo = FALSE, cache = TRUE}
+sub.data.unit.feet <- all.data[get(total.units.name) > 0 & get(total.units.name) < 5000 & get(land.square.feet.name) > 0 & get(land.square.feet.name) < 50000000 & get(sale.price.name) > 50000 & get(sale.price.name) < 5000000, ]
+ggplot(data = sub.data.unit.feet) +
+  geom_point(mapping = aes(x = get(total.units.name), y = get(scaled.price.name))) +
+  labs(title = "Scaled NYC Real Estate Price by Total Units", x = "Total Units", y = "Scaled Sale Price")
+ggplot(data = sub.data.unit.feet) +
+  geom_point(mapping = aes(x = get(land.square.feet.name), y = get(scaled.price.name))) +
+  labs(title = "Scaled NYC Real Estate Price by Land Square feet", x = "Land Square Feet", y = "Scaled Sale Price")
+```
+
+## Tax class
+
+```{r}
+unique(all.data[,get(tax.class.name)])
+unique(all.data[,get(tax.class.sale.name)])
+
+text.borough <- dat[, .N, by = c(tax.class.name, borough.name)]
+text.sale.borough <- dat[, .N, by = c(tax.class.sale.name, borough.name)]
+
+ggplot(data = text.borough, mapping = aes(x = get(tax.class.name), y = N)) +
+  geom_bar(stat = "identity", color = "blue", fill = "#99CCFF") +
+  labs(x = "Group of Total Units", y = "Number of Cases in each Group") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  facet_grid(`Fixed Borough` ~ . )
+
+ggplot(data = text.sale.borough, mapping = aes(x = as.factor(get(tax.class.sale.name)), y = N)) +
+  geom_bar(stat = "identity", color = "blue", fill = "#99CCFF") +
+  labs(x = "Group of Total Units", y = "Number of Cases in each Group") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  facet_grid(`Fixed Borough` ~ . )
+
+ggplot(data = dat, aes(x = get(tax.class.name), y = get(log.price.name))) +
+  geom_boxplot() +
+  labs(title = "Logarithm of NYC Real Estate Price by Total Units", x = "Tax class at present", y = "Log Sale Price") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+ggplot(data = dat, aes(x = as.factor(get(tax.class.sale.name)), y = get(log.price.name))) +
+  geom_boxplot() +
+  labs(title = "Logarithm of NYC Real Estate Price by Total Units", x = "Tax class at time of sale", y = "Log Sale Price") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+```
