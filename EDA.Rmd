@@ -2,7 +2,7 @@
 title: "Exploratory Data Analysis"
 author: "Lea Collin"
 date: "4/9/2019"
-output: pdf_document
+output: html_document
 ---
 
 ```{r load_libraries, include = FALSE}
@@ -264,3 +264,18 @@ res_hist
 ```
 
 A problem we are noticing as we look more and more at the data is that it is never clear if the buyer purchased one unit in the property or if they purchased all the units in the property. For example, one residential property sold for around $4 billion and had around 8000 units which is about $500,000 per unit (which would be reasonable). However, other times a property seems to have sold for $53 million for a single unit. The dataset doesn't provide a lot of information on when a single unit within the property was purchased and when the whole building was purchased. Furthermore, sometimes the unit information is not even present.
+
+Now we take a look at the building class codes and their breakdown across the boroughs. Below, we have a bar graph of the number of buildings of each code class in the dataset in each borough. Because there are so many building codes and many had such a negligible amount sold in the data, we plotted only the rows that had more than 250 sold.
+
+```{r building_codes, fig.height = 10, fig.width = 20}
+summary.building.codes <- all.data[, .N, by = c(building.class.first.letter, borough.name)]
+
+summary.building.codes <- summary.building.codes[N > 250, ]
+
+code.plot <- ggplot(summary.building.codes, aes(x = reorder(`Building Class First Letter`, -1*`N`), y = `N`, fill = `Fixed Borough`)) +
+             geom_bar(stat = 'identity', position="dodge") + xlab("Building Class Code") + ylab("# Sold") + labs(fill = "Borough") +
+             theme_minimal()
+
+code.plot
+```
+
