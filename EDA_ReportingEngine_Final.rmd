@@ -17,6 +17,17 @@ library(choroplethr)
 library(choroplethrZip)
 library(tidyverse)
 library(data.table)
+library(randomForest) #random forest algo
+library(DataExplorer) #plot missing values
+library(caret) #splitting dataset
+library(Hmisc) #function cut2
+library(dlookr) #find skewness
+library(glmnet) #lasso
+library(e1071) #skewness func
+library(bit64)
+library(corrplot)
+library(rpart)
+library(rpart.plot)
 assignInNamespace("cedta.override", c(data.table:::cedta.override,"rmarkdown"), "data.table")
 opts_chunk$set(echo = FALSE, comment="", warning = FALSE, message = FALSE, tidy.opts=list(width.cutoff=55), tidy = TRUE)
 ```
@@ -53,6 +64,7 @@ building.class.sale.name <- "BUILDING CLASS AT TIME OF SALE"
 sale.price.name <- "SALE PRICE"
 sale.date.name <- "SALE DATE"
 sale.year.name <- "Sale Year"
+sale.month <- "SALE MONTH"
 log.price.name <- "Log Price"
 building.class.first.letter <- "Building Class First Letter"
 all.data <- all.data[, `Sale Year` := year(get(sale.date.name))]
@@ -93,9 +105,79 @@ year.variables <- unique(all.data[, get(sale.year.name)])
 first.letter.variables <- unique(all.data[, get(building.class.first.letter)])
 residential.codes <- c("A", "B", "C", "D", "RR", "R1", "R2", "R3", "R4", "R6", "R7", "R8", "R9")
 line.variables <- c(borough.name, building.class.first.letter)
+
+model.inputs <- c(borough.name, land.square.feet.name, gross.square.feet.name, sale.year.name, total.units.name, year.built.name, neighborhood.name)
+```
+
+```{r data_cleaning}
+
+all.data[, `SALE YEAR` := year(get(sale.date.name))]
+all.data[, `SALE MONTH` := month(get(sale.date.name))]
+
+occurences<-all.data[, .N, eval(sale.month)] #evenly distributed
+
+month.wise.sale<-all.data[,.("Mean Sale"=mean(`SALE PRICE`)),sale.month] 
+monthly.sales<-merge(month.wise.sale,occurences,by = sale.month)
+monthly.sales<-setorderv(monthly.sales,order=-1,cols="Mean Sale")
+
+setDT(all.data)
+all.data.tax.class.na<-all.data[is.na(`TAX CLASS AT PRESENT`),.SD] #20640 na values
+#option 1: to remove these 20640 values from dataset as most of other variables like land sqr feet are also 0 and also 20640 missing values in building class at present also correspond to these values
+
+#cleaning dataset
+all.data.clean<-all.data[!is.na(all.data$`TAX CLASS AT PRESENT`),.SD]
+all.data.clean<-all.data.clean[!is.na(`BUILDING CLASS CATEGORY`),.SD]
+all.data.clean$`YEAR BUILT`[all.data.clean$`YEAR BUILT`== 0] <- NA
+
+#making brackets for year built(grouping prop based on the year they were built in)
+cuts.year <- c(1900,1925,1950,1975,2000)
+all.data.clean[, eval(year.built.name) := cut2(x = get(year.built.name), cuts = cuts.year)]
+#removing 0 values from sale price
+all.data.clean$`SALE PRICE`[all.data.clean$`SALE PRICE`==0]<-NA
+all.data.clean$`LAND SQUARE FEET`[all.data.clean$`LAND SQUARE FEET`==0]<-NA
+all.data.clean$`GROSS SQUARE FEET`[all.data.clean$`GROSS SQUARE FEET`==0]<-NA
+
+all.data.clean<-all.data.clean[!is.na(all.data.clean$`YEAR BUILT`),.SD]
+all.data.clean<-all.data.clean[!is.na(all.data.clean$`SALE PRICE`),.SD]
+all.data.clean<-all.data.clean[!is.na(all.data.clean$`LAND SQUARE FEET`),.SD]
+all.data.clean<-all.data.clean[!is.na(all.data.clean$`GROSS SQUARE FEET`),.SD]
+all.data.clean<-select(all.data.clean,c(-7,-10))
+
+neigh<-all.data.clean[,.N,NEIGHBORHOOD]
+setorderv(neigh,col="N",order=-1)
+
+neigh.50<-neigh[1:50,]
+
+neigh.price<-all.data.clean[,.('mean price'=mean(`SALE PRICE`)),NEIGHBORHOOD]
+setorderv(neigh.price,cols="mean price",order=-1)
+
+neigh.analysis<-merge(neigh,neigh.price,by = neighborhood.name)
+setorderv(neigh.analysis,cols="mean price",order=-1)
+
+all.data.clean$`SALE PRICE`=scale(all.data.clean$`SALE PRICE`)
+
+a<-createDataPartition(all.data.clean$`SALE PRICE`,p = 0.70,groups =100,list=FALSE)
+traina<-all.data.clean[a,]
+testa<-all.data.clean[-a,]
+
+neigh.analysis.50<-neigh.analysis[1:50]
+selected.neighbors<-all.data.clean[get(neighborhood.name) %in% neigh.analysis.50$NEIGHBORHOOD]
+
+#split
+set.seed(100)
+n<-createDataPartition(selected.neighbors$`SALE PRICE`,p = 0.70,groups =100,list=FALSE)
+train.n<-selected.neighbors[n,]
+test.n<-selected.neighbors[-n,]
 ```
 
 ```{r functions}
+round.numerics <- function(x, digits){
+  if(is.numeric(x)){
+    x <- round(x = x, digits = digits)
+  }
+  return(x)
+}
+
 graph.choropleth <- function(data, year){
   keep_cols = c(zip.name, sale.price.name)
   data(zip.regions)
@@ -120,6 +202,100 @@ graph.choropleth <- function(data, year){
 avg.sale.price.by <- function(data, by.column.names){
   mean.price <- data[, .(`Avg. Price` = mean(get(sale.price.name), na.rm=TRUE)), by = by.column.names]
   return (mean.price)
+}
+
+engagement.model <- function(dt, outcome.name, input.names){
+
+  res <- fit.model(dt = dt, outcome.name = outcome.name, input.names = input.names)
+  return(res)
+}
+fit.model <- function(dt, outcome.name, input.names, digits = 3){
+  the.formula <- reduce.formula(dt = dt, outcome.name = outcome.name, input.names = input.names)
+  
+  mod <- lm(formula = the.formula, data = dt)
+  mod.summary <- linear.regression.summary(lm.mod = mod, digits = digits)
+  mod.summary.rounded <- mod.summary[, lapply(X = .SD, FUN = "round.numerics", digits = digits)]
+  return(mod.summary.rounded)
+}
+
+linear.regression.summary <- function(lm.mod, digits = 3){
+  library(data.table)
+  lm.coefs <- as.data.table(summary(lm.mod)$coefficients, keep.rownames = TRUE)
+  alpha = 0.05
+  z <- qnorm(p = 1-alpha/2, mean = 0, sd = 1)
+  lm.coefs[, Coef.Lower.95 := Estimate - z * `Std. Error`]
+  lm.coefs[, Coef.Upper.95 := Estimate + z * `Std. Error`]
+  return(lm.coefs)
+}
+
+create.formula <- function(outcome.name, input.names, input.patterns = NA, all.data.names = NA, return.as = "character"){
+  
+  variable.names.from.patterns <- c()
+  if(!is.na(input.patterns[1]) & !is.na(all.data.names[1])){
+    pattern <- paste(input.patterns, collapse = "|")
+    variable.names.from.patterns <- all.data.names[grep(pattern = pattern, x = all.data.names)]
+  }
+  all.input.names <- unique(c(input.names, variable.names.from.patterns))
+  all.input.names <- all.input.names[all.input.names != outcome.name]
+  
+  if(!is.na(all.data.names[1])){
+    all.input.names <- all.input.names[all.input.names %in% all.data.names]
+  }
+
+  input.names.delineated <- sprintf("`%s`", all.input.names)
+  the.formula <- sprintf("`%s` ~ %s", outcome.name, paste(input.names.delineated, collapse = "+"))
+  
+  if(return.as == "formula"){
+    return(as.formula(the.formula))
+  }
+  if(return.as != "formula"){
+    return(the.formula)
+  }
+}
+reduce.formula <- function(dt, outcome.name, input.names, input.patterns = NA, max.input.categories = 20, max.outcome.categories.to.search = 4, return.as = "formula"){
+  require(data.table)
+  dt <- setDT(dt)
+  
+  if(!(outcome.name %in% names(dt))){
+    return("Error:  outcome.name is not in names(dt).")
+  }
+  
+  pattern.names <- list()
+  if(!is.na(input.patterns[1])){
+    for(i in 1:length(input.patterns)){
+      pattern.names[[i]] <- names(dt)[grep(pattern = input.patterns[i], x = names(dt))]
+    }
+  }
+  all.input.names <- c(input.names, as.character(pattern.names))
+  
+  num.outcome.categories <- dt[!is.na(get(outcome.name)), length(unique(get(outcome.name)))]
+  
+  if(num.outcome.categories <= max.outcome.categories.to.search){
+    num.unique.tab <- dt[, lapply(X = .SD, FUN = function(x){return(length(unique(x[!is.na(x)])))}), .SDcols = input.names, by = outcome.name]
+    min.categories.tab <- num.unique.tab[, lapply(X = .SD, FUN = "min"), .SDcols = input.names]
+    
+    reduced.inputs <- names(min.categories.tab)[min.categories.tab >= 2]
+  }
+  if(num.outcome.categories > max.outcome.categories.to.search){
+    reduced.inputs <- all.input.names
+  }
+  
+  the.formula <- create.formula(outcome.name = outcome.name, input.names = reduced.inputs, all.data.names = names(dt), input.patterns = NA, return.as = return.as)
+  return(the.formula)
+}
+
+add.backtick <- function(x, include.backtick = "as.needed"){
+  if(include.backtick == "all"){
+    w <- 1:length(x)
+  }
+  if(include.backtick == "as.needed"){
+    w <- grep(pattern = " ", x = x, fixed = TRUE)
+  }  
+  if(length(w) > 0){
+    x[w] <- sprintf("`%s`", x[w])
+  }
+
+  return(x)
 }
 ```
 
@@ -309,4 +485,25 @@ renderPlot({
       scale_color_manual(values = c("#000000", "#9966FF", "#66CC00", "#3399FF", "#0066CC", "#FF6633"))
   number_year
 })
+```
+
+Linear Regression Model
+==================================
+
+Select the inputs you'd like to include in the linear regression model. 
+
+Row {data-height = 300}
+----------------------------------
+
+```{r engagement_models}
+inputPanel(
+  selectInput(inputId='model_inputs', label = "Inputs to Model", choice = model.inputs, selected = model.inputs, multiple = TRUE)
+)
+
+
+renderDataTable({
+  
+  datatable(engagement.model(train.n, sale.price.name, input$model_inputs))
+})
+
 ```
