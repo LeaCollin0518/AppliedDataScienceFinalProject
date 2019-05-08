@@ -138,15 +138,13 @@ Column {data-width=500}
 -------------------------------------
 
 ```{r choropleth_map_1}
-# maybe include two charts so that you can have a side-by-side comparison
 inputPanel(
   selectInput(inputId="year_variable_1", label = "Select Year 1:", choices = sort(year.variables), selected = sort(year.variables)[length(year.variables)]),
   selectInput(inputId="building_class_type_1", label = "Select Building Class Type 1:", choices = first.letter.variables, selected = residential.codes, multiple = TRUE)
 )
 renderPlot({
-  choropleth.dat <- dat[get(sale.year.name) == input$year_variable_1 & get(building.class.first.letter) %in% input$building_class_type_1,]
+  choropleth.dat <- all.data[get(sale.year.name) == input$year_variable_1 & get(building.class.first.letter) %in% input$building_class_type_1,]
   graph.choropleth(choropleth.dat, input$year_variable_1)
-  # choro.map_
 })
 ```
 
@@ -154,22 +152,20 @@ Column {data-width=500}
 -------------------------------------
 
 ```{r choropleth_map_2}
-# maybe include two charts so that you can have a side-by-side comparison
 inputPanel(
   selectInput(inputId="year_variable_2", label = "Select Year 2:", choices = sort(year.variables), selected = sort(year.variables)[length(year.variables)-1]),
   selectInput(inputId="building_class_type_2", label = "Select Building Class Type 2:", choices = first.letter.variables, selected = residential.codes, multiple = TRUE)
 )
 renderPlot({
-  choropleth.dat <- dat[get(sale.year.name) == input$year_variable_2 & get(building.class.first.letter) %in% input$building_class_type_2,]
+  choropleth.dat <- all.data[get(sale.year.name) == input$year_variable_2 & get(building.class.first.letter) %in% input$building_class_type_2,]
   graph.choropleth(choropleth.dat, input$year_variable_2)
-  # choro.map
 })
 ```
 
 Time-Series 
 =====================================
 
-Row {data-width=800}
+Row {data-width=500}
 -------------------------------------
 
 ```{r line_graph}
@@ -179,36 +175,68 @@ inputPanel(
 )
 renderPlot({
   if (input$line_variable == building.class.first.letter){
-    sub.dat <- dat[get(building.class.first.letter) %in% input$line_building_class_type,]
+    sub.dat <- all.data[get(building.class.first.letter) %in% input$line_building_class_type,]
     mean.price <- avg.sale.price.by(sub.dat, c(sale.year.name, input$line_variable))
     setorderv(x = mean.price, cols = "Sale Year", order = 1)
-    # mean.price <- mean.price %>% mutate(input$line_variable = forcats::fct_reorder2(input$line_variable, `Sale Year`, `Avg. Price`))
+    mean.price <- mean.price %>% mutate(`Building Class First Letter` = forcats::fct_reorder2(`Building Class First Letter`, `Sale Year`, `Avg. Price`))
     
     price.plot <- ggplot(mean.price, aes(`Sale Year`, as.integer(`Avg. Price`), color = `Building Class First Letter`)) + 
                    geom_line(size = 1) + geom_point(aes(`Sale Year`,as.integer(`Avg. Price`))) +
                    xlab("Sale Year") + ylab("Avg. Price") + labs(color = "Building Class") +
                    scale_x_continuous(breaks = scales::pretty_breaks(length(unique(mean.price$`Sale Year`)))) +
-                   ggtitle("NYC Avg. Residential Real Estate Price by Building Class & Year") 
+                   ggtitle("NYC Avg. Residential Real Estate Price by Building Class & Year") + theme_minimal(base_size = 12)
     price.plot
   }
   else{
-    sub.dat <- dat
+    sub.dat <- all.data
     mean.price <- avg.sale.price.by(sub.dat, c(sale.year.name, input$line_variable))
+    
+    mean.year.price <- avg.sale.price.by(dat, c(sale.year.name))
+    mean.year.price$`Fixed Borough` <- "Overall"
+
+    mean.price <- rbind(mean.price, mean.year.price)
+
     setorderv(x = mean.price, cols = "Sale Year", order = 1)
-    # mean.price <- mean.price %>% mutate(input$line_variable = forcats::fct_reorder2(input$line_variable, `Sale Year`, `Avg. Price`))
+    mean.price <- mean.price %>% mutate(`Fixed Borough` = forcats::fct_reorder2(`Fixed Borough`, `Sale Year`, `Avg. Price`))
     
     price.plot <- ggplot(mean.price, aes(`Sale Year`, as.integer(`Avg. Price`), color = `Fixed Borough`)) + 
                    geom_line(size = 1) + geom_point(aes(`Sale Year`,as.integer(`Avg. Price`))) +
                    xlab("Sale Year") + ylab("Avg. Price") + labs(color = "Borough") +
                    scale_x_continuous(breaks = scales::pretty_breaks(length(unique(mean.price$`Sale Year`)))) +
-                   ggtitle("NYC Avg. Residential Real Estate Price by Borough & Year") 
+                   scale_color_manual(values=c("#3399FF", "#000000", "#66CC00", "#FF6633", "#9966FF", "#0066CC")) +
+                   ggtitle("NYC Avg. Residential Real Estate Price by Borough & Year")  + theme_minimal(base_size = 12)
     price.plot
   }
 })
 ```
 
-Plot of number of sales in each borough
-===================================
+Building Classes & Boroughs
+==================================
+
+The description of all the building class codes can be found [here](https://www1.nyc.gov/assets/finance/jump/hlpbldgcode.html).
+
+Row {data-width=500}
+----------------------------------
+
+```{r class_borough}
+inputPanel(
+  selectInput(inputId="bar_building_class_type", label = "Select Building Class Type:", choices = first.letter.variables, selected = residential.codes, multiple = TRUE))
+renderPlot({
+  summary.building.codes <- all.data[, .N, by = c(building.class.first.letter, borough.name)]
+  summary.building.codes <- summary.building.codes[N > 250, ]
+  summary.building.codes <- summary.building.codes[get(building.class.first.letter) %in% input$bar_building_class_type]
+  
+  code.plot <- ggplot(summary.building.codes, aes(x = reorder(`Building Class First Letter`, -1*`N`), y = `N`, fill = `Fixed Borough`)) +
+             geom_bar(stat = 'identity', position="dodge") + xlab("Building Class Code") + ylab("# Sold") + labs(fill = "Borough") +
+             scale_fill_manual(values=c("#FF6633", "#66CC00", "#3399FF", "#9966FF", "#0066CC")) +
+             theme_minimal(base_size = 20)
+
+  code.plot
+})
+```
+
+Number of Sales by Borough
+======================================
 
 
 Row {data-height=500}
@@ -231,92 +259,54 @@ renderPlot({
      sub <- all.data[all.data$BOROUGH == i, ]
      a[i, 2] <- nrow(sub)
     }
-    number_borough <- ggplot(data = a, aes(x = borough, y = number)) +
-      geom_bar(stat="identity", width=0.5) + 
-      xlab('Borough')
+    number_borough <- ggplot(data = a, aes(x = reorder(borough, -1*number), y = number)) +
+      geom_bar(stat="identity", width=0.5, color = "blue", fill = "#99CCFF") + 
+      xlab('Borough') + theme_minimal(base_size = 20)
     return(number_borough)
   }else{
     for (i in 1:5){
        sub <- all.data[all.data$BOROUGH == i & all.data$`SALE YEAR` == input$input_year, ]
        a[i, 2] <- nrow(sub)
     }
-    number_borough <- ggplot(data = a, aes(x = borough, y = number)) +
-      geom_bar(stat = "identity", width = 0.5) + 
-      xlab('Borough')
+    number_borough <- ggplot(data = a, aes(x = reorder(borough, -1*number), y = number)) +
+      geom_bar(stat = "identity", width = 0.5, color = "blue", fill = "#99CCFF") + 
+      xlab('Borough') + theme_minimal(base_size = 20)
     return(number_borough)
   }
   
 })
 ```
 
-Plot of number of sales in each year
-===================================
+Number of Sales by Year
+====================================
 
 
-Row {data-height=500}
+Row {data-width=500}
 -------------------------------------
 
 ```{r}
 inputPanel(
-  selectInput(inputId = "input_borough", label = "Select Borough:", 
-              choices = c(borough_name, 'All'), selected = 'All')
+  selectInput(inputId = "line_borough", label = "Select Borough:", 
+              choices = c(borough_name, 'Overall'), selected = "Overall", multiple = TRUE)
 )
 renderPlot({
   
-  b <- matrix(0, nrow = length(sale_year), ncol = 2)
-  b <- as.data.frame(b)
-  colnames(b) <- c('sale year', 'number')
-  b$`sale year` <- sale_year
+  all.sales <- all.data[, .N, by = sale.year.name]
+  all.sales$`Fixed Borough` <- "Overall"
   
-  if (input$input_borough == 'All'){
-    for (i in 1:length(sale_year)){
-      sub <- all.data[all.data$`SALE YEAR` == sale_year[i], ]
-      b[i, 2] <- nrow(sub)
-    }
-    number_year <- ggplot(data = b, aes(x = `sale year`, y = number, group=1)) +
-      geom_line() + 
-      xlab('Year')
-    return(number_year)
-  }else{
-    for (i in 1:length(sale_year)){
-      sub <- all.data[all.data$`SALE YEAR` == sale_year[i] & all.data$BOROUGH == which(input$input_borough == borough_name), ]
-      b[i, 2] <- nrow(sub)
-    }
-    number_year <- ggplot(data = b, aes(x = `sale year`, y = number, group=1)) +
-      geom_line() + 
-      xlab('Year')
-    return(number_year)
-  }
+  borough.sales <- all.data[, .N, by = c(sale.year.name, borough.name)]
   
-})
-```
-
-Plot considering units and square feet
-===================================
-
-
-Row {data-height=500}
--------------------------------------
-
-```{r}
-inputPanel(
-  selectInput(inputId = "units_sf_group", label = "Type of units or square feet", choices = c(residential.group.name, commercial.group.name, total.units.group.name, land.group.name, gross.group.name), selected = total.units.group.name),
-  selectInput(inputId = "num_price", label = "Choose to show number of cases or the price", choices = c("Number of cases", "Price"), selected = "Number of cases")
-)
-
-renderPlot({
-  if (input$num_price == "Number of cases") {
-    Num <- all.data[, .N, by = get(input$units_sf_group)]
-    ggplot(data = Num, mapping = aes(x = get(input$np_us_group), y = N)) +
-      geom_bar(stat = "identity", color = "blue", fill = "#99CCFF") +
-      labs(x = sprintf("Group of %", get(input$units_sf_group)), y = "Number of Cases in each Group") +
-      theme(axis.text.x = element_text(angle = 45, hjust = 1))
-  }
-  else {
-    ggplot(data = all.data, aes(x = get(input$units_sf_group), y = get(log.price.name))) +
-      geom_boxplot() +
-      labs(title = sprintf("Logarithm of NYC Real Estate Price by %", get(input$units_sf_group)), x = sprintf("Group of %", get(input$units_sf_group)), y = "Log Sale Price") +
-      theme(axis.text.x = element_text(angle = 45, hjust = 1))
-  }
+  all.sales <- rbind(borough.sales, all.sales)
+  
+  all.sales <- all.sales[get(borough.name) %in% input$line_borough,]
+  setorderv(x = all.sales, cols = "Sale Year", order = 1)
+  all.sales <- all.sales %>% mutate(`Fixed Borough` = forcats::fct_reorder2(`Fixed Borough`, `Sale Year`, N))
+  
+  number_year <- ggplot(data = all.sales, aes(x = `Sale Year`, y = N, color = `Fixed Borough`)) +
+      geom_line(size = 1) + xlab("Sale Year") + ylab("# Sold") + labs(color = "Borough") +
+      scale_x_continuous(breaks = scales::pretty_breaks(length(unique(all.sales$`Sale Year`)))) +
+      theme_minimal(base_size = 12) +
+      scale_color_manual(values = c("#000000", "#9966FF", "#66CC00", "#3399FF", "#0066CC", "#FF6633"))
+  number_year
 })
 ```

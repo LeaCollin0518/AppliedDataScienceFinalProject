@@ -126,11 +126,11 @@ The data was obtained from NYC Department of Finance. The link to the data can b
 
 # Examination of the Data
 
-The original dataset was broken up by borough. This means there were 5 files for each year (one file per borough) and 15 years so there were 75 separate excel files in total. Thankfully, the columns of each file lined up in obvious ways and we were able to merge all the files into a single .csv file for ease of analysis. The code used to merge all the data can be found [here](https://github.com/LeaCollin0518/AppliedDataScienceFinalProject/blob/master/DataCleaning.Rmd)
+The original dataset was broken up by borough. This means there were 5 files for each year (one file per borough) and 15 years so there were 75 separate excel files in total. Thankfully, the columns of each file lined up in obvious ways and we were able to merge all the files into a single .csv file for ease of analysis. The code used to merge all the data can be found [here](https://github.com/LeaCollin0518/AppliedDataScienceFinalProject/blob/master/DataCleaning.Rmd).
 
-The first change we made to the data was re-encoding the borough variable. In the original set, the boroughs were simply numbers. Because we assumed borough would be such an important variable, we wanted to make sure it was the actual borough name. The code to re-encode the variable can be found [here](https://github.com/LeaCollin0518/AppliedDataScienceFinalProject/blob/master/DataCleaning.Rmd)
+The first change we made to the data was re-encoding the borough variable. In the original set, the boroughs were simply numbers. Because we assumed borough would be such an important variable, we wanted to make sure it was the actual borough name. The code to re-encode the variable can be found [here](https://github.com/LeaCollin0518/AppliedDataScienceFinalProject/blob/master/DataCleaning.Rmd).
 
-We checked the quality of the data by inspecting each variable and how it is related to sale price. We also read a few articles on real estate to gain familiarity with the industry as certain things which original seem a bit illogical might become clearer once we get an idea about the nuances of this particular sector. 
+We added a variable to the data which is the first letter of the building class codes. The description of all the building class codes can be found [here](https://www1.nyc.gov/assets/finance/jump/hlpbldgcode.html). Each code consists of a letter and a number. There are many codes but it seems that the letter describes the general type of building. For example, building codes starting in the letter "A" are one-family homes. 
 
 We also wanted to know how much data came from each borough so we have a table below that simply shows the count of the number of rows in the dataset coming from each borough. Somewhat surprisingly, the boroughs we have the most rows from are Queens and Brooklyn when we previously thought it would be Manhattan. This could be because Manhattan has so many large buildings that even though many units are sold, many of them by sold all together in one property. 
 
@@ -141,11 +141,14 @@ setorderv(x = borough.counts, cols = "# Rows", order = -1)
 datatable(borough.counts)
 ```
 
+We checked the quality of the data by inspecting each variable and how it is related to sale price. We also read a few articles on real estate to gain familiarity with the industry as certain things which original seem a bit illogical might become clearer once we get an idea about the nuances of this particular sector. 
+
+
 ### Challenge #1 - Missing Data
 
 One of the most challenging aspects of the dataset was treating missing and unexpected values. Below, we look at how many missing values there are in each column and the patterns of missing values.  
 
-```{r, echo = FALSE}
+```{r count_na, echo = FALSE}
 colSums(is.na(all.data))
 ```
 
@@ -188,7 +191,7 @@ To answer our questions about the data and the topic, we first got acquainted wi
 
 Before we jumping into building our machine learning model, we did some detailed exploratory data analysis. This analysis starts with looking at the overall trend of the average sale price. Below, we see a graph of this trend for each borough and the overall dataset. 
 
-```{r avg_sale_price_borough, echo = FALSE}
+```{r avg_sale_price_borough, fig.width = 8, echo = FALSE}
 mean.year.borough.price <- avg.sale.price.by(dat, c(sale.year.name, borough.name))
 mean.year.price <- avg.sale.price.by(dat, c(sale.year.name))
 mean.year.price$`Fixed Borough` <- "Overall"
@@ -202,14 +205,70 @@ year.borough.price.plot <- ggplot(all.year.price, aes(`Sale Year`, as.integer(`A
                    geom_line(size = 1) + geom_point(aes(`Sale Year`,as.integer(`Avg. Price`))) +
                    xlab("Sale Year") + ylab("Avg. Price") + labs(color = "Borough") +
                    scale_x_continuous(breaks = scales::pretty_breaks(length(unique(all.year.price$`Sale Year`)))) +
-                   scale_color_manual(values=c("#3399FF", "#000000", "#66CC00", "#FF3300", "#9933FF", "#0066CC")) +
-                   ggtitle("NYC Avg. Real Estate Price by Borough and Year") 
+                   scale_color_manual(values=c("#3399FF", "#000000", "#66CC00", "#FF6633", "#9966FF", "#0066CC")) +
+                   ggtitle("NYC Avg. Real Estate Price by Borough and Year") + theme_minimal(base_size = 12)
 
 year.borough.price.plot
 ```
 
 Not too surprisingly, Manhattan sales prices are the highest among the five boroughs. In recent years, we have seen Brooklyn becoming a more sought-after neighborhood which has led to increases in higher real estate prices, as corroborated by this graph. We should note that since this dataset does not only include apartment buildings, that that is probably also the reason that we see such high real estate prices in Manhattan. Manhattan has many more large buildings than, say, Staten Island which is much more residential. What is also interesting to note is that the Manhattan line follows basically the same trend as the overall city trend because it has the highest prices and is dominating the trend because of it. We see in all five boroughs and the overall trend that there is a dip in prices from 2007 to 2009, very likely caused by the financial crisis. This drop is most noticeable in Manhattan. 
 
+Another time trend we can look at is the average sale price by the building class type. Because there are many different building classes and a lot of what we care about is more of the residential real estate, we subset the data for this graph to only the classes that are more residential. We include this plot in our interactive component so that the user can see trends for more building class types. Note: there are `r all.data[get(building.class.present.name) != get(building.class.sale.name), .N]` rows where the building class at present and the building class at time of sale are not the same. For the purposes of visualization and subsetting, we will use the building class at time of sale since we care about the sale price of the property. 
+
+```{r get_residential, indluce = FALSE}
+dat <- all.data[get(sale.price.name) > 50000]
+residential.codes <- c("A", "B", "C", "D", "RR", "R1", "R2", "R3", "R4", "R6", "R7", "R8", "R9")
+residential.properties <- all.data[get(building.class.first.letter) %in% residential.codes,]
+```
+
+```{r avg_sale_price_code, fig.width = 8, echo = FALSE}
+mean.year.code.price <- avg.sale.price.by(residential.properties, c(sale.year.name, building.class.first.letter))
+setorderv(x = mean.year.code.price, cols = "Sale Year", order = 1)
+mean.year.code.price <- mean.year.code.price %>% mutate(`Building Class First Letter` = forcats::fct_reorder2(`Building Class First Letter`, `Sale Year`, `Avg. Price`)) # for coloring
+
+year.code.price.plot <- ggplot(mean.year.code.price, aes(`Sale Year`, as.integer(`Avg. Price`), color = `Building Class First Letter`)) + 
+                   geom_line(size = 1) + geom_point(aes(`Sale Year`,as.integer(`Avg. Price`))) +
+                   xlab("Sale Year") + ylab("Avg. Price") + labs(color = "Building Class") +
+                   scale_x_continuous(breaks = scales::pretty_breaks(length(unique(mean.year.code.price$`Sale Year`)))) +
+                   ggtitle("NYC Avg.Residential Real Estate Price by Class Code and Year") + theme_minimal(base_size = 12)
+
+year.code.price.plot
+```
+
+We see that the ranking by price remains pretty consistent throughout the 15 year range. **C** and **D** are consistently more expensive, with **D** being the most, and **B** and **A** buildings are fairly similar in average price across the years. All of the **D** buildings are elevator buildings which could explain why they are more expensive. Additionally, the **D** class buildings have "luxury apartments" which could be bumping up the average price. What's also interesting is that **D** buildings have more volatile average prices, though this could be due to the fact that the graph is on their scale and so we can't see the volatility in the lower average prices. Again we see a big dip in 2009 after the financial crisis.
+
+We can also take a look at a breakdown of these building class codes across the boroughs. Here, we have a bar graph of the number of buildings of each code class in the dataset in each borough. Because there are so many building codes and many had such a negligible amount sold in the data, we plotted only the rows that had more than 250 sold in the 15 years. Note: we are showing the raw counts, not the proportions. 
+
+```{r building_codes, fig.height = 10, fig.width = 20, echo = FALSE}
+summary.building.codes <- all.data[, .N, by = c(building.class.first.letter, borough.name)]
+
+summary.building.codes <- summary.building.codes[N > 250, ]
+
+code.plot <- ggplot(summary.building.codes, aes(x = reorder(`Building Class First Letter`, -1*`N`), y = `N`, fill = `Fixed Borough`)) +
+             geom_bar(stat = 'identity', position="dodge") + xlab("Building Class Code") + ylab("# Sold") + labs(fill = "Borough") +
+             scale_fill_manual(values=c("#FF6633", "#66CC00", "#3399FF", "#9966FF", "#0066CC")) +
+             theme_minimal(base_size = 20)
+
+code.plot
+```
+
+There are a few interesting things that stand out from this graph. For one, Manhattan is the only borough that has buldings of type **H** and **L**. Buildings with a class code starting with **H** are generally hotels, motels, or hostels and **L** buildings are lofts. The hotels being sold only in Manhattan isn't too surprising as we know that there are many hotels there and the other boroughs are generally more residential. This doesn't mean that there are no hotels in the other boroughs however, it simply shows that none were **sold** during this 15 year period of time. Buildings with an **R** class code seem to be some of the most popular, but they are also the most varied According to our data source, these properties range from indoor parking and office spaces to condos in buildings with other residential units. Building codes of class **A** are all of the one-family properties and we see that Queens and Staten Island have the highest number of those (Manhattan barely has any). Brooklyn and Queens have almost the same number of **B** properties sold, which are all two-family properties. All of this once again reaffirms our idea that Manhattan is mainly large buildings and the smaller boroughs are more residential. Some of the lowest counts in building class codes are **I** and **W**. **I** codes are for buildings such as nursing homes and hospitals and **W** is for schools and university buildings. 
+
+Now we zoom in a bit more and look at how zip code (and therefore neighborhood) affect sale price. We have a choropleth map for the overall dataset shown below. We only look at the data for 2017 for simplicity in this static report. In our interactive component, we have two choropleth maps side-by-side where the user can choose two different years to better see if trends have changed over the years in each neighborhood. In the application, the user can additionally choose which building classes to include. 
+
+```{r choropleth_map, echo = FALSE}
+graph.choropleth(all.data, 2017)
+```
+
+As we can see, the range of values for sale price is enormous. Some areas have buildings with an average price of $2.2 billion! We have already noted that the likely reason for this is that some properties are large office buildings or even hospitals. The most expensive buildings that are likely office spaces can be found in Downtown or Midtown Manhattan which makes sense as this is where the corporate side of New York resides.  
+
+Because we said we are more interested in residential properties, we created the same graph only including these properties, again only for 2017. 
+
+```{r residential_choropleth, echo = FALSE}
+graph.choropleth(residential.properties, 2017)
+```
+
+Now that we are only including residential properties, the sales prices are easier to compare between parts of New York. Not surprisingly, many of the most expensive properites are in Manhattan. We see that Staten Island and the Bronx are probably the most affordable. Brooklyn and Queens are also more affordable except the parts that are closest to Manhattan are pricier. Even within Manhattan we see trends that make sense. Midtown and Downtown Manhattan see much higher average prices than anything at or above Central Park. 
 
 # Interpretation
 
@@ -225,6 +284,8 @@ Our results also confirmed some of our previous assumptions. Manhattan is the mo
 
 # References
 
+### IGNORE BELOW FOR NOW
+
 ```{r sale_price}
 all.data[get(sale.price.name) == 0, .N]
 all.data[get(sale.price.name) < 50000, .N]
@@ -237,31 +298,7 @@ A \$0 sale indicates that there was a transfer of ownership without a cash consi
 It may be interesting to look at what kinds of properties are most common in transfers of ownership with no cash consideration, especially since they make up almost a third of our dataset. Furthermore, there are other "weird" values. Such as values of 1 or 10. We'll take a closer look at the types of buildings that list these as their sale price. For now, we will only look at data that has a price of more than 50,000 and continue with our analysis.
 
 
-We could have also chosen to split this line graph by the building class type. We saw that the building class can be in a "broader" category based on the first letter in the class code. 
 
-```{r need_to_reorganize}
-dat <- all.data[get(sale.price.name) > 50000]
-residential.codes <- c("A", "B", "C", "D", "RR", "R1", "R2", "R3", "R4", "R6", "R7", "R8", "R9")
-residential.properties <- dat[get(building.class.first.letter) %in% residential.codes,]
-```
-
-```{r avg_sale_price_code}
-mean.year.code.price <- avg.sale.price.by(residential.properties, c(sale.year.name, building.class.first.letter))
-setorderv(x = mean.year.code.price, cols = "Sale Year", order = 1)
-mean.year.code.price <- mean.year.code.price %>% mutate(`Building Class First Letter` = forcats::fct_reorder2(`Building Class First Letter`, `Sale Year`, `Avg. Price`)) # for coloring
-
-year.code.price.plot <- ggplot(mean.year.code.price, aes(`Sale Year`, as.integer(`Avg. Price`), color = `Building Class First Letter`)) + 
-                   geom_line(size = 1) + geom_point(aes(`Sale Year`,as.integer(`Avg. Price`))) +
-                   xlab("Sale Year") + ylab("Avg. Price") + labs(color = "Building Class") +
-                   scale_x_continuous(breaks = scales::pretty_breaks(length(unique(mean.year.code.price$`Sale Year`)))) +
-                   ggtitle("NYC Avg.Residential Real Estate Price by Class Code and Year") 
-
-year.code.price.plot
-```
-
-## Need to reorganize with things mentioned further down
-
-We see that the ranking by price remains pretty consistent throughout the 14 year range. "A" type buildings are consistently the buildings with the lowest average price whereas "C" and "D" class buildings are consistetly much higher priced. All of the "D" buildings are elevator buildings which could explain why they are more expensive. Additionally, the "D" class buildings have "luxury apartments" which could be bumping up the average price.
 
 Now we will look at the distribution of each borough's sale prices over the years. For this static report, we will focus only on 2003 and 2017 and look at the distribution for each borough. In our Shiny application, we will give the user a chance to look at each year, however, this is just too much variable information to show in a static report.
 
@@ -287,10 +324,6 @@ box.borough.2003.plot <- ggplot(box.borough.2003, aes(x = reorder(`Fixed Borough
 box.borough.2003.plot
 ```
 
-```{r choropleth_map}
-graph.choropleth(dat, 2017)
-```
-
 As we can see, the range of values for sale price is enormous. Some areas have buildings with an average price of $2.2 billion! This is because the dataset includes any sale of property. Some properties are one-family homes or walk-up apartments while others are office buildings or retail buildings. The most expensive buildings that are likely office spaces can be found in Downtown or Midtown Manhattan. This makes sense as this is where the corporate side of New York resides.  
 
 We can look at the distribution of the data furthermore by building class code. The class codes can be found here: https://www1.nyc.gov/assets/finance/jump/hlpbldgcode.html. The building class at present and building class at time of sale use these building class codes. First, let's take a look at how many rows there are where these codes are not the same. 
@@ -301,17 +334,6 @@ all.data[get(building.class.present.name) != get(building.class.sale.name), .N]
 
 There are `r all.data[get(building.class.present.name) != get(building.class.sale.name), .N]` rows where the building class at present and the building class at time of sale are not the same. For the purposes of visualization and subsetting, we will use the building class at time of sale since we care about the sale price of the property. Now, similar builidng types start with the same letter. For example, building class codes starting with A are one-family homes whereas building class codes starting with B are two-family homes. This means that we can create a new column that is simply the first letter of the building class at the time of sale and this will help us subset our data for visualizations. Based on the documentation, the residential building codes start with: A, B, C, D, and some R. The R codes that don't seem residential are: RA, RB, RG, RH, RK, RP, RS, RT, R0, and R5. Below, we make another data.table with only the residential building class codes at time of sale. 
 
-```{r building_code}
-dat <- all.data[get(sale.price.name) > 50000]
-residential.codes <- c("A", "B", "C", "D", "RR", "R1", "R2", "R3", "R4", "R6", "R7", "R8", "R9")
-residential.properties <- dat[get(building.class.first.letter) %in% residential.codes,]
-```
-
-```{r residential_choropleth}
-graph.choropleth(residential.properties, 2017)
-```
-
-Now that we are only including residential properties, the sales prices are easier to compare between parts of New York. Not surprisingly, many of the most expensive properites are in New York. We see that Staten Island and the Bronx are probably the most affordable. Brooklyn and Queens are also more affordable except the part that are closest to Manhattan are pricier. Even within Manhattan we see trends that make sense. The Upper East side seems to be slightly more expensive than the Upper West side. Midtown isn't terrible whereas Downtown is already getting more expensive. Once we get all the way up to Washington and Inwood Heights, the prices are similar to those in Brooklyn. In the reporting engine, the user can compare different subsets of the data side by side. The user is allowed to choose the year and the building class category to subset by.
 
 Now we'll look at the distribution of the sales prices faceted on different variables, such as year, building class code, borough, or any combination of these. Again, the Shiny app will have all of these options available for the user. For the purposes of this static report, we looked at the residential distributions by borough in 2009 and 2017.
 
@@ -331,20 +353,5 @@ res_hist <- ggplot(hist.data, aes(x=as.numeric(`SALE PRICE`))) +
 res_hist
 ```
 
-A problem we are noticing as we look more and more at the data is that it is never clear if the buyer purchased one unit in the property or if they purchased all the units in the property. For example, one residential property sold for around $4 billion and had around 8000 units which is about $500,000 per unit (which would be reasonable). However, other times a property seems to have sold for $53 million for a single unit. The dataset doesn't provide a lot of information on when a single unit within the property was purchased and when the whole building was purchased. Furthermore, sometimes the unit information is not even present.
+A problem we are noticing as we look more and more at the data is that it is never clear if the buyer purchased one unit in the property or if they purchased all the units in the property. For example, one residential property sold for around \$4 billion and had around 8000 units which is about \$500,000 per unit (which would be reasonable). However, other times a property seems to have sold for \$53 million for a single unit. The dataset doesn't provide a lot of information on when a single unit within the property was purchased and when the whole building was purchased. Furthermore, sometimes the unit information is not even present.
 
-Now we take a look at the building class codes and their breakdown across the boroughs. The description of the class codes can be found [here](https://www1.nyc.gov/assets/finance/jump/hlpbldgcode.html). Below, we have a bar graph of the number of buildings of each code class in the dataset in each borough. Because there are so many building codes and many had such a negligible amount sold in the data, we plotted only the rows that had more than 250 sold. Note below that we are showing the raw counts, not the proportions. 
-
-```{r building_codes, fig.height = 10, fig.width = 20}
-summary.building.codes <- all.data[, .N, by = c(building.class.first.letter, borough.name)]
-
-summary.building.codes <- summary.building.codes[N > 250, ]
-
-code.plot <- ggplot(summary.building.codes, aes(x = reorder(`Building Class First Letter`, -1*`N`), y = `N`, fill = `Fixed Borough`)) +
-             geom_bar(stat = 'identity', position="dodge") + xlab("Building Class Code") + ylab("# Sold") + labs(fill = "Borough") +
-             theme_minimal(base_size = 20)
-
-code.plot
-```
-
-There are a few interesting things that stand out from this graph. For one, Manhattan is the only borough that has buldings of type **H** and **L**. Buildings with a class code starting with **H** are generally hotels, motels, or hostels and **L** buildings lofts. The hotels being sold only in Manhattan isn't too surprising as we know that there are many hotels here and the other boroughs are generally more residential. This doesn't mean that there are no hotels in the other boroughs however, it simply shows that none were **sold** during this 14-year period of time. Buildings with an **R** class code seem to be some of the most popular, but they are also the most mixed. According to our data source, these properties range from indoor parking and office spaces to condos in buildings with other residential units. Again, Manhattan has the most sales. Building codes of class **A** are all of the one-family properties and we see that Queens and Staten Island have the highest number of those (Manhattan barely has any). Brooklyn and QUeens have almost the same number of **B** properties sold, which are all two-family properties. All of this once again reaffirms our idea that Manhattan is mainly large buildings and the smaller boroughs are more residential. Some of the lowest counts in building class codes are **I** and **W**. **I** codes are for buildings such as nursing homes and hospitals and **W** is for schools and university buildings (these aren't exactly the hottest properties). 
