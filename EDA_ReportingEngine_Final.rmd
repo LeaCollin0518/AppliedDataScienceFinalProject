@@ -64,6 +64,7 @@ building.class.sale.name <- "BUILDING CLASS AT TIME OF SALE"
 sale.price.name <- "SALE PRICE"
 sale.date.name <- "SALE DATE"
 sale.year.name <- "Sale Year"
+sale.year<-"SALE YEAR"
 sale.month <- "SALE MONTH"
 log.price.name <- "Log Price"
 building.class.first.letter <- "Building Class First Letter"
@@ -106,14 +107,13 @@ first.letter.variables <- unique(all.data[, get(building.class.first.letter)])
 residential.codes <- c("A", "B", "C", "D", "RR", "R1", "R2", "R3", "R4", "R6", "R7", "R8", "R9")
 line.variables <- c(borough.name, building.class.first.letter)
 
-model.inputs <- c(borough.name, land.square.feet.name, gross.square.feet.name, sale.year.name, total.units.name, year.built.name, neighborhood.name)
+model.inputs <- c(borough.name, land.square.feet.name, gross.square.feet.name, sale.year, total.units.name, year.built.name, neighborhood.name)
 ```
 
 ```{r data_cleaning}
-
-all.data[, `SALE YEAR` := year(get(sale.date.name))]
-all.data[, `SALE MONTH` := month(get(sale.date.name))]
-
+all.data$`SALE DATE`<-ymd(as.Date(all.data$`SALE DATE`))    #conversion from factor to date format
+all.data$`SALE YEAR`<-year(all.data$`SALE DATE`)   #extracting year from sale date
+all.data$`SALE MONTH`<-month(all.data$`SALE DATE`) #extracting months from sale date
 occurences<-all.data[, .N, eval(sale.month)] #evenly distributed
 
 month.wise.sale<-all.data[,.("Mean Sale"=mean(`SALE PRICE`)),sale.month] 
@@ -211,7 +211,7 @@ engagement.model <- function(dt, outcome.name, input.names){
 }
 fit.model <- function(dt, outcome.name, input.names, digits = 3){
   the.formula <- reduce.formula(dt = dt, outcome.name = outcome.name, input.names = input.names)
-  
+
   mod <- lm(formula = the.formula, data = dt)
   mod.summary <- linear.regression.summary(lm.mod = mod, digits = digits)
   mod.summary.rounded <- mod.summary[, lapply(X = .SD, FUN = "round.numerics", digits = digits)]
@@ -360,7 +360,7 @@ renderPlot({
                    geom_line(size = 1) + geom_point(aes(`Sale Year`,as.integer(`Avg. Price`))) +
                    xlab("Sale Year") + ylab("Avg. Price") + labs(color = "Building Class") +
                    scale_x_continuous(breaks = scales::pretty_breaks(length(unique(mean.price$`Sale Year`)))) +
-                   ggtitle("NYC Avg. Residential Real Estate Price by Building Class & Year") + theme_minimal(base_size = 12)
+                   ggtitle("NYC Avg. Residential Real Estate Price by Building Class & Year") + theme_minimal(base_size = 14)
     price.plot
   }
   else{
@@ -380,7 +380,7 @@ renderPlot({
                    xlab("Sale Year") + ylab("Avg. Price") + labs(color = "Borough") +
                    scale_x_continuous(breaks = scales::pretty_breaks(length(unique(mean.price$`Sale Year`)))) +
                    scale_color_manual(values=c("#3399FF", "#000000", "#66CC00", "#FF6633", "#9966FF", "#0066CC")) +
-                   ggtitle("NYC Avg. Residential Real Estate Price by Borough & Year")  + theme_minimal(base_size = 12)
+                   ggtitle("NYC Avg. Residential Real Estate Price by Borough & Year")  + theme_minimal(base_size = 14)
     price.plot
   }
 })
@@ -403,7 +403,7 @@ renderPlot({
   summary.building.codes <- summary.building.codes[get(building.class.first.letter) %in% input$bar_building_class_type]
   
   code.plot <- ggplot(summary.building.codes, aes(x = reorder(`Building Class First Letter`, -1*`N`), y = `N`, fill = `Fixed Borough`)) +
-             geom_bar(stat = 'identity', position="dodge") + xlab("Building Class Code") + ylab("# Sold") + labs(fill = "Borough") +
+             geom_bar(stat = 'identity', position="dodge") + xlab("Building Class Code") + ylab("Number of Sales") + labs(fill = "Borough") +
              scale_fill_manual(values=c("#FF6633", "#66CC00", "#3399FF", "#9966FF", "#0066CC")) +
              theme_minimal(base_size = 20)
 
@@ -479,9 +479,9 @@ renderPlot({
   all.sales <- all.sales %>% mutate(`Fixed Borough` = forcats::fct_reorder2(`Fixed Borough`, `Sale Year`, N))
   
   number_year <- ggplot(data = all.sales, aes(x = `Sale Year`, y = N, color = `Fixed Borough`)) +
-      geom_line(size = 1) + xlab("Sale Year") + ylab("# Sold") + labs(color = "Borough") +
+      geom_line(size = 1) + xlab("Sale Year") + ylab("Number of Sales") + labs(color = "Borough") +
       scale_x_continuous(breaks = scales::pretty_breaks(length(unique(all.sales$`Sale Year`)))) +
-      theme_minimal(base_size = 12) +
+      theme_minimal(base_size = 14) +
       scale_color_manual(values = c("#000000", "#9966FF", "#66CC00", "#3399FF", "#0066CC", "#FF6633"))
   number_year
 })
@@ -490,7 +490,7 @@ renderPlot({
 Linear Regression Model
 ==================================
 
-Select the inputs you'd like to include in the linear regression model. 
+Select the inputs you'd like to include in the linear regression model. Note that the dependent variable here is the scaled version of the price of each property.
 
 Row {data-height = 300}
 ----------------------------------

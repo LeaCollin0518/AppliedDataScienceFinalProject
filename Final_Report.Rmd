@@ -16,6 +16,7 @@ library(DT)
 library(tidyverse)
 library(extracat)
 library(lubridate)
+library(Hmisc)
 library(choroplethr)
 library(choroplethrZip)
 ```
@@ -23,7 +24,6 @@ library(choroplethrZip)
 ```{r load_data, include = FALSE}
 setwd("~/Columbia/AppliedDS/FinalProject/AppliedDataScienceFinalProject")
 all.data <- fread("Data/NYCRealEstateFullData.csv")
-all.data$BOROUGH <- NULL
 ```
 
 ```{r functions, include = FALSE}
@@ -105,7 +105,26 @@ sale.price.name <- "SALE PRICE"
 sale.date.name <- "SALE DATE"
 sale.year.name <- "Sale Year"
 log.price.name <- "Log Price"
+sale.month<-"SALE MONTH"
+sale.year<-"SALE YEAR"
 building.class.first.letter <- "Building Class First Letter"
+year.built.name <- "YEAR BUILT"
+borough_name <- c("Manhattan", "Bronx", "Brooklyn", "Queens", "Staten Island")
+residential.group.name <- "RESIDENTIAL UNITS GROUP"
+commercial.group.name <- "COMMERCIAL UNITS GROUP"
+total.units.group.name <- "TOTAL UNIT GROUP"
+land.group.name <- "LAND SQUARE FEET GROUP"
+gross.group.name <- "GROSS SQUARE FEET GROUP"
+cuts.total <- c(0, 1, 2, 3, 5)
+cuts.land <- c(0, 100, 1000, 2000, 3000)
+all.data[, eval(total.units.group.name) := cut2(x = get(total.units.name), cuts = cuts.total)]
+all.data[, eval(land.group.name) := cut2(x = get(land.square.feet.name), cuts = cuts.land)]
+unique.total.units.group <- all.data[, unique(get(total.units.group.name))]
+unique.land.group <- all.data[, unique(get(land.group.name))]
+scaled.price.name <- "Scaled Price"
+scaled.total.units <- "Scaled Total Units"
+all.data[, eval(scaled.price.name) := scale(x = get(sale.price.name))]
+all.data[, eval(scaled.total.units) := scale(x = get(total.units.name))]
 
 # also taking the log for future graphing
 all.data[, `Log Price` := log(get(sale.price.name))]
@@ -191,8 +210,8 @@ To answer our questions about the data and the topic, we first got acquainted wi
 
 Before we jumping into building our machine learning model, we did some detailed exploratory data analysis. This analysis starts with looking at the overall trend of the average sale price. Below, we see a graph of this trend for each borough and the overall dataset. 
 
-```{r avg_sale_price_borough, fig.width = 8, echo = FALSE}
-mean.year.borough.price <- avg.sale.price.by(dat, c(sale.year.name, borough.name))
+```{r avg_sale_price_borough, fig.width = 10, echo = FALSE}
+mean.year.borough.price <- avg.sale.price.by(all.data, c(sale.year.name, borough.name))
 mean.year.price <- avg.sale.price.by(dat, c(sale.year.name))
 mean.year.price$`Fixed Borough` <- "Overall"
 
@@ -206,9 +225,12 @@ year.borough.price.plot <- ggplot(all.year.price, aes(`Sale Year`, as.integer(`A
                    xlab("Sale Year") + ylab("Avg. Price") + labs(color = "Borough") +
                    scale_x_continuous(breaks = scales::pretty_breaks(length(unique(all.year.price$`Sale Year`)))) +
                    scale_color_manual(values=c("#3399FF", "#000000", "#66CC00", "#FF6633", "#9966FF", "#0066CC")) +
-                   ggtitle("NYC Avg. Real Estate Price by Borough and Year") + theme_minimal(base_size = 12)
+                   ggtitle("NYC Avg. Real Estate Price by Borough and Year") + theme_gray(base_size = 14)
 
 year.borough.price.plot
+
+# "#3399FF", "#000000", "#66CC00", "#FF6633", "#9966FF", "#0066CC"
+# Manhattan, Overall, Brooklyn, Bronx, Queens, Staten Island
 ```
 
 Not too surprisingly, Manhattan sales prices are the highest among the five boroughs. In recent years, we have seen Brooklyn becoming a more sought-after neighborhood which has led to increases in higher real estate prices, as corroborated by this graph. We should note that since this dataset does not only include apartment buildings, that that is probably also the reason that we see such high real estate prices in Manhattan. Manhattan has many more large buildings than, say, Staten Island which is much more residential. What is also interesting to note is that the Manhattan line follows basically the same trend as the overall city trend because it has the highest prices and is dominating the trend because of it. We see in all five boroughs and the overall trend that there is a dip in prices from 2007 to 2009, very likely caused by the financial crisis. This drop is most noticeable in Manhattan. 
@@ -221,7 +243,7 @@ residential.codes <- c("A", "B", "C", "D", "RR", "R1", "R2", "R3", "R4", "R6", "
 residential.properties <- all.data[get(building.class.first.letter) %in% residential.codes,]
 ```
 
-```{r avg_sale_price_code, fig.width = 8, echo = FALSE}
+```{r avg_sale_price_code, fig.width = 10, echo = FALSE}
 mean.year.code.price <- avg.sale.price.by(residential.properties, c(sale.year.name, building.class.first.letter))
 setorderv(x = mean.year.code.price, cols = "Sale Year", order = 1)
 mean.year.code.price <- mean.year.code.price %>% mutate(`Building Class First Letter` = forcats::fct_reorder2(`Building Class First Letter`, `Sale Year`, `Avg. Price`)) # for coloring
@@ -230,12 +252,41 @@ year.code.price.plot <- ggplot(mean.year.code.price, aes(`Sale Year`, as.integer
                    geom_line(size = 1) + geom_point(aes(`Sale Year`,as.integer(`Avg. Price`))) +
                    xlab("Sale Year") + ylab("Avg. Price") + labs(color = "Building Class") +
                    scale_x_continuous(breaks = scales::pretty_breaks(length(unique(mean.year.code.price$`Sale Year`)))) +
-                   ggtitle("NYC Avg.Residential Real Estate Price by Class Code and Year") + theme_minimal(base_size = 12)
+                   ggtitle("NYC Avg.Residential Real Estate Price by Class Code and Year") + theme_gray(base_size = 14)
 
 year.code.price.plot
 ```
 
 We see that the ranking by price remains pretty consistent throughout the 15 year range. **C** and **D** are consistently more expensive, with **D** being the most, and **B** and **A** buildings are fairly similar in average price across the years. All of the **D** buildings are elevator buildings which could explain why they are more expensive. Additionally, the **D** class buildings have "luxury apartments" which could be bumping up the average price. What's also interesting is that **D** buildings have more volatile average prices, though this could be due to the fact that the graph is on their scale and so we can't see the volatility in the lower average prices. Again we see a big dip in 2009 after the financial crisis.
+
+We now turn our attention to the number of sales in each borough over the years. 
+
+```{r number_of_sales, fig.width = 10, echo = F}
+year <- substr(all.data$`SALE DATE`, 1, 4)
+all.data$`SALE YEAR` <- year
+number_sale_year <- as.data.frame(all.data[, (.N), by = `SALE YEAR`])
+for (i in 1:5){
+  a <- as.data.frame(all.data[BOROUGH == i, (.N), by = `SALE YEAR`])
+  number_sale_year <- rbind(number_sale_year, a)
+}
+number_sale_year$Region <- c(rep('Overall', 15), rep('Manhattan', 15), rep('Bronx', 15),
+                              rep('Brooklyn', 15), rep('Queens', 15), rep('Staten Island', 15))
+colnames(number_sale_year)[2] <- 'Number of Sale'
+
+number_year <- ggplot(data = number_sale_year, aes(x = `SALE YEAR`, y = `Number of Sale`, color = Region, group = Region)) +
+  geom_line(size = 1) + 
+  xlab('Year') +
+  ylab('Number of Sale') +scale_color_manual(values = c("#FF6633", "#66CC00", "#3399FF", "#000000", "#9966FF", "#0066CC")) +
+  theme_gray(base_size = 14)
+number_year
+
+# "#3399FF", "#000000", "#66CC00", "#FF6633", "#9966FF", "#0066CC"
+# Manhattan, Overall, Brooklyn, Bronx, Queens, Staten Island
+```
+
+Overall speaking, the number of sales in New York city dropped at the first 7 years of the period and then slightly rised after 2010. As we all know that, a subprime mortgage crisis happened from early 2006 to 2010, this can be the main reason of the huge drop in number of house sales in the same period, the values drops from over 125000 to below 75000. After 2010, the house market starts to recover, a raise to 870000 can be observed from 2010 to 2012, after that it remains at this level, still far from the level of 2003. 
+
+As for the tend in each borough, Satene Island and Bronx always had the lowest sales nuber and Queens always had the highest. All the 5 borough were effected by the subprime mortgage crisis. Except for Manhattan, all other borough has the similar trend as the the overall condition. As for manhattan, the sales number flatuated during the period. It was raising slightly from 2003 to 2006 when at the smae time the sales number in all other boroughs was decreasing and it as decreasing slightly from 2013 to 2017 when the sales number in all other borough was inceasing. The reason why this is happening required further investigation with data with popultion, economics and finance condition in each borough. 
 
 We can also take a look at a breakdown of these building class codes across the boroughs. Here, we have a bar graph of the number of buildings of each code class in the dataset in each borough. Because there are so many building codes and many had such a negligible amount sold in the data, we plotted only the rows that had more than 250 sold in the 15 years. Note: we are showing the raw counts, not the proportions. 
 
@@ -245,14 +296,71 @@ summary.building.codes <- all.data[, .N, by = c(building.class.first.letter, bor
 summary.building.codes <- summary.building.codes[N > 250, ]
 
 code.plot <- ggplot(summary.building.codes, aes(x = reorder(`Building Class First Letter`, -1*`N`), y = `N`, fill = `Fixed Borough`)) +
-             geom_bar(stat = 'identity', position="dodge") + xlab("Building Class Code") + ylab("# Sold") + labs(fill = "Borough") +
+             geom_bar(stat = 'identity', position="dodge") + xlab("Building Class Code") + ylab("Number of Sales") + labs(fill = "Borough") +
              scale_fill_manual(values=c("#FF6633", "#66CC00", "#3399FF", "#9966FF", "#0066CC")) +
-             theme_minimal(base_size = 20)
+             theme_gray(base_size = 20)
 
 code.plot
 ```
 
 There are a few interesting things that stand out from this graph. For one, Manhattan is the only borough that has buldings of type **H** and **L**. Buildings with a class code starting with **H** are generally hotels, motels, or hostels and **L** buildings are lofts. The hotels being sold only in Manhattan isn't too surprising as we know that there are many hotels there and the other boroughs are generally more residential. This doesn't mean that there are no hotels in the other boroughs however, it simply shows that none were **sold** during this 15 year period of time. Buildings with an **R** class code seem to be some of the most popular, but they are also the most varied According to our data source, these properties range from indoor parking and office spaces to condos in buildings with other residential units. Building codes of class **A** are all of the one-family properties and we see that Queens and Staten Island have the highest number of those (Manhattan barely has any). Brooklyn and Queens have almost the same number of **B** properties sold, which are all two-family properties. All of this once again reaffirms our idea that Manhattan is mainly large buildings and the smaller boroughs are more residential. Some of the lowest counts in building class codes are **I** and **W**. **I** codes are for buildings such as nursing homes and hospitals and **W** is for schools and university buildings. 
+
+We also looked at the relationship between price per square foot and borough.
+
+```{r mean_median, echo = F}
+sub <- all.data[all.data$`SALE PRICE` != 0 & all.data$`GROSS SQUARE FEET` != 0 & all.data$`SALE PRICE` > 500000, ]
+sub$`PRICE PER FEET` <- sub$`SALE PRICE`/sub$`GROSS SQUARE FEET`
+median_price_feet_2 <- as.data.frame(sub[, .(price = median(x = `PRICE PER FEET`, na.rm = T)), keyby = BOROUGH])
+mean_price_feet_2 <- as.data.frame(sub[, .(price = mean(x = `PRICE PER FEET`, na.rm = T)), keyby = BOROUGH])
+price_feet_2 <- rbind(median_price_feet_2, mean_price_feet_2)
+price_feet_2$BOROUGH <- rep(borough_name, 2)
+price_feet_2$Type <- c(rep('median', 5), rep('mean', 5))
+price_feet_2$price <- round(price_feet_2$price, 0)
+
+price_borough <- ggplot(data = price_feet_2, mapping = aes(x = reorder(factor(BOROUGH), -1*price),y = price, fill = Type)) +
+  geom_bar(stat = "identity", position = 'dodge') + 
+  scale_fill_manual(values = c('steelblue', 'orange')) +
+  xlab('Borough') +
+  ylab('Price Per Square Foot') +
+  geom_text(aes(label = price), vjust = 1.5, colour = "white", position = position_dodge(.9), size = 4)
+
+price_borough
+```
+
+The plot shows that Brooklyn has the highest price for unit square foot, which is around $1500, almost doubled the price in Manhattan. This is contradict to the intuition of house price condition in New York city that Manhattan is the most expensive borough. The reason result in this might be that most of data for Brooklyn comes from a relatively rich neighborhood in Brooklyn, so that the mean price per square foot is overestimated and the data for Manhattan is not complete so the price for this borough is underestimated. To avoid this the efeect of extreme values, median was used instead of mean value. The plot shows that the price in Manhattan is highest, which is around 500, Queens ranks the second, with a price around 330. Brooklyn, Staten island and Bronx ranked from 3 to 5, whcih is reasonable. It is also obvious that in each borough, mean priceis higher than median price, which means that in general, houses iwth higher quality can have a very high price. This phenamenna is extrenmly obvious in Brooklyn and Manhattan, where stands many luxary residentials. 
+
+We can also look at how price per square foot has changed across the boroughs in time.
+
+```{r square_foot_year_borough, echo = F, fig.width = 8}
+year <- substr(sub$`SALE DATE`, 1, 4)
+sub$`SALE YEAR` <- year
+price_feet_2_time <- as.data.frame(sub[, .(price = median(x = `PRICE PER FEET`, na.rm = T)), keyby = `SALE YEAR`])
+for (i in 1:5){
+  a <- sub[BOROUGH == i, .(price = median(x = `PRICE PER FEET`, na.rm = T)), keyby = `SALE YEAR`]
+  price_feet_2_time <- rbind(price_feet_2_time, a)
+}
+price_feet_2_time$Region <- c(rep('Overall', 15), rep('Manhattan', 15), rep('Bronx', 15),
+                              rep('Brooklyn', 15), rep('Queens', 15), rep('Staten Island', 15))
+
+price_year <- ggplot(data = price_feet_2_time, aes(x = `SALE YEAR`, y = price, color = Region, group = Region)) +
+  geom_line(size = 1) + 
+  xlab('Year') +
+  ylab('Price per Square Foot') +
+  scale_color_manual(values = c("#FF6633", "#66CC00", "#3399FF", "#000000", "#9966FF", "#0066CC")) +
+  theme_gray(base_size = 12)
+
+price_year
+```
+In general, the price per foot in New York city was raising in the 14 years, from around \$250 to around \$400. The most expensive borough is always Manhattan, after 2006, the price in Manhattan is much higher than the other 4 borough, and the cheapest borough is always Bronx. The effect of subprime mortbage cirsis cannot be observed in the price arcoss New York. Even we look into each borough, this effect is still limited in every borough except Manhattan. From 2008 and 2009, there is a sharp drop in the price per foot in Manhattan, the reason can be that, most of costumers for real estate in Manhattan are investors, bankers, business man or financail firms, and they are also the ones who lost most during the financail crisis, so that is why house market in Manhattan suffers most from the financial crisis. An other intersting thing is that, as the first 3 years, the house price in each borough was not as seperated as in the latest year. part of the reason can be the un-completenesss of the dataset. An other reason can be that price in New York increased a lot during the period. By checking data provided by Barach College(https://www.baruch.cuny.edu/nycdata/consumer_prices/cpi.htm), CPI in New York have raised from 197.8 in 2003 to 268.5 in 2017, this may magnifies the gap among house price in different borough.  
+
+```{r tax_class_box, echo = FALSE}
+
+tax.box.plot <- ggplot(data = dat, aes(x = reorder(as.factor(get(tax.class.sale.name)), -1*`Log Price`, FUN=median), y = get(log.price.name))) +
+  geom_boxplot(fill = "#99CCFF") +
+  labs(x = "Tax class at Time of Sale", y = "Log Sale Price") + theme_gray(base_size = 15)
+
+tax.box.plot
+```
 
 Now we zoom in a bit more and look at how zip code (and therefore neighborhood) affect sale price. We have a choropleth map for the overall dataset shown below. We only look at the data for 2017 for simplicity in this static report. In our interactive component, we have two choropleth maps side-by-side where the user can choose two different years to better see if trends have changed over the years in each neighborhood. In the application, the user can additionally choose which building classes to include. 
 
@@ -269,6 +377,69 @@ graph.choropleth(residential.properties, 2017)
 ```
 
 Now that we are only including residential properties, the sales prices are easier to compare between parts of New York. Not surprisingly, many of the most expensive properites are in Manhattan. We see that Staten Island and the Bronx are probably the most affordable. Brooklyn and Queens are also more affordable except the parts that are closest to Manhattan are pricier. Even within Manhattan we see trends that make sense. Midtown and Downtown Manhattan see much higher average prices than anything at or above Central Park. 
+
+## Binning Total Units and Land Square Feet 
+
+```{r barplot_unit_square.feet_num, echo = FALSE, warning = FALSE}
+unit.Num <- all.data[, .N, by = total.units.group.name]
+ggplot(data = unit.Num, mapping = aes(x = get(total.units.group.name), y = N)) +
+  geom_bar(stat = "identity", color = "blue", fill = "#99CCFF") +
+  labs(x = "Group of Total Units", y = "Number of Cases in each Group") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+```
+
+``` {r barplot_land_square, echo = FALSE}
+land.Num <- all.data[, .N, by = land.group.name]
+ggplot(data = land.Num, mapping = aes(x = get(land.group.name), y = N)) +
+  geom_bar(stat = "identity", color = "blue", fill = "#99CCFF") + 
+  labs(x = "Group of Land Square Feet", y = "Number of Cases in each Group") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+```
+
+## Inspecting Logarithm of Price
+
+```{r boxplot_unit_square.feet_price, echo = FALSE, warning = FALSE, cache = TRUE}
+ggplot(data = dat, aes(x = get(total.units.group.name), y = get(log.price.name))) +
+  geom_boxplot(fill = "#99CCFF") +
+  labs(title = "Logarithm of NYC Real Estate Price by Total Units", x = "Group of Total Units", y = "Log Sale Price") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+```
+
+```{r box_land_square, echo = FALSE, cache = TRUE}
+ggplot(data = dat, aes(x = get(land.group.name), y = get(log.price.name))) +
+  geom_boxplot(fill = "#99CCFF") +
+  labs(title = "Logarithm of NYC Real Estate Price by Land Square Feet", x = "Group of Land Square Feet", y = "Log Sale Price") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+```
+
+## Correlation Between Price and Land Square Feet
+
+```{r scatter_unit_square.feet_1, echo = FALSE, cache = TRUE}
+ggplot(data = dat) +
+  geom_point(mapping = aes(x = get(total.units.name), y = get(scaled.price.name))) +
+  labs(title = "Scaled NYC Real Estate Price by Total Units", x = "Total Units", y = "Scaled Sale Price")
+```
+
+```{r land_scatter, echo = FALSE, cache = TRUE}
+ggplot(data = dat) +
+  geom_point(mapping = aes(x = get(land.square.feet.name), y = get(scaled.price.name))) +
+  labs(title = "Scaled NYC Real Estate Price by Land Square feet", x = "Land Square Feet", y = "Scaled Sale Price")
+```
+
+## Correlation on a Subset
+
+```{r scatter_unit_square.feet_2, echo = FALSE, cache = TRUE}
+sub.data.unit.feet <- all.data[get(total.units.name) > 0 & get(total.units.name) < 5000 & get(land.square.feet.name) > 0 & get(land.square.feet.name) < 50000000 & get(sale.price.name) > 50000 & get(sale.price.name) < 5000000, ]
+ggplot(data = sub.data.unit.feet) +
+  geom_point(mapping = aes(x = get(total.units.name), y = get(scaled.price.name))) +
+  labs(title = "Scaled NYC Real Estate Price by Total Units", x = "Total Units", y = "Scaled Sale Price")
+```
+
+```{r scatter_scaled, echo = FALSE, cache= TRUE}
+ggplot(data = sub.data.unit.feet) +
+  geom_point(mapping = aes(x = get(land.square.feet.name), y = get(scaled.price.name))) +
+  labs(title = "Scaled NYC Real Estate Price by Land Square feet", x = "Land Square Feet", y = "Scaled Sale Price")
+```
 
 # Interpretation
 
