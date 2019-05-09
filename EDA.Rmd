@@ -235,59 +235,11 @@ residential.codes <- c("A", "B", "C", "D", "RR", "R1", "R2", "R3", "R4", "R6", "
 residential.properties <- dat[get(building.class.first.letter) %in% residential.codes,]
 ```
 
-```{r residential_choropleth}
-#graph.choropleth(residential.properties, 2017)#
-```
 
-Now that we are only including residential properties, the sales prices are easier to compare between parts of New York. Not surprisingly, many of the most expensive properites are in New York. We see that Staten Island and the Bronx are probably the most affordable. Brooklyn and Queens are also more affordable except the part that are closest to Manhattan are pricier. Even within Manhattan we see trends that make sense. The Upper East side seems to be slightly more expensive than the Upper West side. Midtown isn't terrible whereas Downtown is already getting more expensive. Once we get all the way up to Washington and Inwood Heights, the prices are similar to those in Brooklyn. In the reporting engine, the user can compare different subsets of the data side by side. The user is allowed to choose the year and the building class category to subset by.
+## Gengyu Zhang
 
-Now we'll look at the distribution of the sales prices faceted on different variables, such as year, building class code, borough, or any combination of these. Again, the Shiny app will have all of these options available for the user. For the purposes of this static report, we looked at the residential distributions by borough in 2009 and 2017.
 
-```{r hist_2017_class}
-hist.data <- residential.properties[get(sale.price.name) < 5000000 & get(sale.year.name) == 2017,]
-res_hist <- ggplot(hist.data, aes(x=as.numeric(`SALE PRICE`))) +
-            geom_histogram(color = "blue", fill = "#99CCFF", bins = 75) +
-            facet_grid(`Building Class First Letter` ~ .) + xlab("Sale Price")
-res_hist
-```
-
-```{r hist_2017_borough}
-hist.data <- residential.properties[get(sale.price.name) < 5000000 & get(sale.year.name) == 2017,]
-res_hist <- ggplot(hist.data, aes(x=as.numeric(`SALE PRICE`))) +
-            geom_histogram(color = "blue", fill = "#99CCFF", bins = 75) +
-            facet_grid(`Fixed Borough` ~ .) + xlab("Sale Price")
-res_hist
-```
-
-A problem we are noticing as we look more and more at the data is that it is never clear if the buyer purchased one unit in the property or if they purchased all the units in the property. For example, one residential property sold for around $4 billion and had around 8000 units which is about $500,000 per unit (which would be reasonable). However, other times a property seems to have sold for $53 million for a single unit. The dataset doesn't provide a lot of information on when a single unit within the property was purchased and when the whole building was purchased. Furthermore, sometimes the unit information is not even present.
-
-## Binning Total Units and Land Square Feet 
-
-```{r barplot_unit_square.feet_num, echo = FALSE, warning = FALSE}
-unit.Num <- all.data[, .N, by = total.units.group.name]
-ggplot(data = unit.Num, mapping = aes(x = get(total.units.group.name), y = N)) +
-  geom_bar(stat = "identity", color = "blue", fill = "#99CCFF") +
-  labs(x = "Group of Total Units", y = "Number of Cases in each Group") +
-  theme(axis.text.x = element_text(angle = 45, hjust = 1))
-land.Num <- all.data[, .N, by = land.group.name]
-ggplot(data = land.Num, mapping = aes(x = get(land.group.name), y = N)) +
-  geom_bar(stat = "identity", color = "blue", fill = "#99CCFF") + 
-  labs(x = "Group of Land Square Feet", y = "Number of Cases in each Group") +
-  theme(axis.text.x = element_text(angle = 45, hjust = 1))
-```
-
-## Inspecting Logarithm of Price
-
-```{r boxplot_unit_square.feet_price, warning = FALSE}
-ggplot(data = dat, aes(x = get(total.units.group.name), y = get(log.price.name))) +
-  geom_boxplot() +
-  labs(title = "Logarithm of NYC Real Estate Price by Total Units", x = "Group of Total Units", y = "Log Sale Price") +
-  theme(axis.text.x = element_text(angle = 45, hjust = 1))
-ggplot(data = dat, aes(x = get(land.group.name), y = get(log.price.name))) +
-  geom_boxplot() +
-  labs(title = "Logarithm of NYC Real Estate Price by Land Square Feet", x = "Group of Land Square Feet", y = "Log Sale Price") +
-  theme(axis.text.x = element_text(angle = 45, hjust = 1))
-```
+Now we are looking at how the unit and the area may affect the price. Without loss of generality, we will mainly focus on total units and land square feet here (and in fact the `total units` is just the sum of the residential units and commercial). We first make the scatter plot of price against these two variables. From these graphs we can find a few data seem like outliers. Also, most of the data concentrate on the left bottom. Therefore we then make the scatter plot on a subset and again we cannot find obvious correlation among these variables. Later we will calculate the correlation and fit linear regression models to check them. Now to make it clearer in visualization we decide to cut these variables into groups because of the discontinuity of the variables, then we can make bar plot like borough and building class.
 
 ## Correlation Between Price and Land Square Feet
 
@@ -312,34 +264,60 @@ ggplot(data = sub.data.unit.feet) +
   labs(title = "Scaled NYC Real Estate Price by Land Square feet", x = "Land Square Feet", y = "Scaled Sale Price")
 ```
 
+
+One interesting thing here is that most of the properties have total units lower than 5; however the bar plot tells us that the difference in price are mainly reflected in the group of total units higher than 5. Another interesting finding is that there is an obvious gap between the first group and the third when we are considering the land square. It may because that the properties can roughly divided into those smaller ones that are residential and larger ones that are commercial. Then it comes to our mind that it may be reasonable to split the data into two big groups. However, the price don¡¯t seem to be increasing when the land square feet increasing, as what we have expected. Compared with the difference among those groups, the differences within each group seem even bigger. 
+
+## Binning Total Units and Land Square Feet 
+
+```{r barplot_unit_square.feet_num, echo = FALSE, warning = FALSE}
+unit.Num <- dat[, .N, by = total.units.group.name]
+ggplot(data = unit.Num, mapping = aes(x = get(total.units.group.name), y = N)) +
+  geom_bar(stat = "identity", color = "blue", fill = "#99CCFF") +
+  labs(x = "Group of Total Units", y = "Number of Cases in each Group") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+land.Num <- dat[, .N, by = land.group.name]
+ggplot(data = land.Num, mapping = aes(x = get(land.group.name), y = N)) +
+  geom_bar(stat = "identity", color = "blue", fill = "#99CCFF") + 
+  labs(x = "Group of Land Square Feet", y = "Number of Cases in each Group") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+```
+
+## Inspecting Logarithm of Price
+
+```{r boxplot_unit_square.feet_price, warning = FALSE}
+ggplot(data = dat, aes(x = get(total.units.group.name), y = get(log.price.name))) +
+  geom_boxplot() +
+  labs(title = "Logarithm of NYC Real Estate Price by Total Units", x = "Group of Total Units", y = "Log Sale Price") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+ggplot(data = dat, aes(x = get(land.group.name), y = get(log.price.name))) +
+  geom_boxplot() +
+  labs(title = "Logarithm of NYC Real Estate Price by Land Square Feet", x = "Group of Land Square Feet", y = "Log Sale Price") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+```
+
+Next we will look at another important variable, tax class. To make it clearer and more meaningful, we will discuss the `Tax class at time of sale` instead of `Tax class at present`, as there are only four different classes at time of sale.
+
 ## Tax class
 
 ```{r}
-unique(all.data[,get(tax.class.name)])
-unique(all.data[,get(tax.class.sale.name)])
-
-text.borough <- dat[, .N, by = c(tax.class.name, borough.name)]
 text.sale.borough <- dat[, .N, by = c(tax.class.sale.name, borough.name)]
-
-ggplot(data = text.borough, mapping = aes(x = get(tax.class.name), y = N)) +
-  geom_bar(stat = "identity", color = "blue", fill = "#99CCFF") +
-  labs(x = "Group of Total Units", y = "Number of Cases in each Group") +
-  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
-  facet_grid(`Fixed Borough` ~ . )
 
 ggplot(data = text.sale.borough, mapping = aes(x = as.factor(get(tax.class.sale.name)), y = N)) +
   geom_bar(stat = "identity", color = "blue", fill = "#99CCFF") +
-  labs(x = "Group of Total Units", y = "Number of Cases in each Group") +
+  labs(x = "Tax Class at time of sale", y = "Number of Cases in each Group") +
   theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
   facet_grid(`Fixed Borough` ~ . )
+```
 
-ggplot(data = dat, aes(x = get(tax.class.name), y = get(log.price.name))) +
-  geom_boxplot() +
-  labs(title = "Logarithm of NYC Real Estate Price by Total Units", x = "Tax class at present", y = "Log Sale Price") +
-  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+This is the bar plot of the breakdown of the tax class across the borough. The most noteworthy feature is that there are far less properties with tax class 1 in Manhattan and properties with tax class 2 in Staten Island. Conversely, there are obviously more properties with tax class 2 in Manhattan. Considering tax class 1 refers to those small residential properties and tax class 2 refers to those properties including cooperatives and condominiums, it is no surprise that the amount of these tax classes differ greatly from Manhattan and Staten Island.
 
+Then from the bar plot considering the price, we find no obvious difference among these tax classes. However, there are far more properties have higher price than average in tax class 2. Remind of the differences across the borough, it seems that those properties with high prices in tax class 2 decide the higher average price in Manhattan. There is even a probability that the factor affecting real estate prices may be due to the tax class, instead of ¡°Manhattan¡±. The influence of the tax class may be further studied in our models.
+
+```{r}
 ggplot(data = dat, aes(x = as.factor(get(tax.class.sale.name)), y = get(log.price.name))) +
   geom_boxplot() +
-  labs(title = "Logarithm of NYC Real Estate Price by Total Units", x = "Tax class at time of sale", y = "Log Sale Price") +
+  labs(title = "Logarithm of NYC Real Estate Price by Tax Class", x = "Tax class at time of sale", y = "Log Sale Price") +
   theme(axis.text.x = element_text(angle = 45, hjust = 1))
 ```
+
+Then from the bar plot considering the price, we find no obvious difference among these tax classes. However, there are far more properties have higher price than average in tax class 2. Remind of the differences across the borough, it seems that those properties with high prices in tax class 2 decide the higher average price in Manhattan. There is even a probability that the factor affecting real estate prices may be due to the tax class, instead of ¡°Manhattan¡±. The influence of the tax class may be further studied in our models.
