@@ -33,7 +33,7 @@ opts_chunk$set(echo = FALSE, comment="", warning = FALSE, message = FALSE, tidy.
 ```
 
 ```{r load_data}
-setwd("~/Columbia/AppliedDS/FinalProject/AppliedDataScienceFinalProject")#
+# setwd("~/Columbia/AppliedDS/FinalProject/AppliedDataScienceFinalProject")
 all.data <- fread("Data/NYCRealEstateFullData.csv")
 year <- substr(all.data$`SALE DATE`, 1, 4)
 all.data$`SALE YEAR` <- year
@@ -218,7 +218,7 @@ fit.model <- function(dt, outcome.name, input.names, digits = 3){
   return(mod.summary.rounded)
 }
 
-linear.regression.summary <- function(lm.mod, digits = 3){
+linear.regression.summary <- function(lm.mod, digits = 5){
   library(data.table)
   lm.coefs <- as.data.table(summary(lm.mod)$coefficients, keep.rownames = TRUE)
   alpha = 0.05
