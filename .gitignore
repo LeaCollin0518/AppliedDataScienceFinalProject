@@ -1,2 +1,8 @@
 Data/*
 *.csv
+*.html
+Presentation_cache/
+Presentation_files/
+!Presentation.html
+Final_Report_cache/
+Final_Report_files/

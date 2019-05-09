@@ -1,0 +1,509 @@
+---
+title: "Final Project Shiny App"
+output: flexdashboard::flex_dashboard
+runtime: shiny
+---
+
+
+```{r setup, include=FALSE}
+library(flexdashboard)
+library(shiny)
+library(rmarkdown)
+library(knitr)
+library(Hmisc)
+library(DT)
+library(lubridate)
+library(choroplethr)
+library(choroplethrZip)
+library(tidyverse)
+library(data.table)
+library(randomForest) #random forest algo
+library(DataExplorer) #plot missing values
+library(caret) #splitting dataset
+library(Hmisc) #function cut2
+library(dlookr) #find skewness
+library(glmnet) #lasso
+library(e1071) #skewness func
+library(bit64)
+library(corrplot)
+library(rpart)
+library(rpart.plot)
+assignInNamespace("cedta.override", c(data.table:::cedta.override,"rmarkdown"), "data.table")
+opts_chunk$set(echo = FALSE, comment="", warning = FALSE, message = FALSE, tidy.opts=list(width.cutoff=55), tidy = TRUE)
+```
+
+```{r load_data}
+setwd("~/Columbia/AppliedDS/FinalProject/AppliedDataScienceFinalProject")#
+all.data <- fread("Data/NYCRealEstateFullData.csv")
+year <- substr(all.data$`SALE DATE`, 1, 4)
+all.data$`SALE YEAR` <- year
+sale_year <- unique(all.data$`SALE YEAR`)
+```
+
+```{r constants}
+old.borough.name <- "BOROUGH"
+borough.name <- "Fixed Borough"
+neighborhood.name <- "NEIGHBORHOOD"
+building.class.name <- "BUILDING CLASS CATEGORY"
+tax.class.name <- "TAX CLASS AT PRESENT"
+block.name <- "BLOCK"
+lot.name <- "LOT"
+easement.name <- "EASE-MENT"
+building.class.present.name <- "BUILDING CLASS AT PRESENT"
+address.name <- "ADDRESS"
+apartment.number.name <- "APARTMENT NUMBER"
+zip.name <- "ZIP CODE"
+residential.name <- "RESIDENTIAL UNITS"
+commercial.name <- "COMMERCIAL UNITS"
+total.units.name <- "TOTAL UNITS"
+land.square.feet.name <- "LAND SQUARE FEET"
+gross.square.feet.name <- "GROSS SQUARE FEET"
+year.built.name <- "YEAR BUILT"
+tax.class.sale.name <- "TAX CLASS AT TIME OF SALE"
+building.class.sale.name <- "BUILDING CLASS AT TIME OF SALE"
+sale.price.name <- "SALE PRICE"
+sale.date.name <- "SALE DATE"
+sale.year.name <- "Sale Year"
+sale.year<-"SALE YEAR"
+sale.month <- "SALE MONTH"
+log.price.name <- "Log Price"
+building.class.first.letter <- "Building Class First Letter"
+all.data <- all.data[, `Sale Year` := year(get(sale.date.name))]
+all.data[, `Building Class First Letter` := substr(get(building.class.sale.name), 1, 1)]
+dat <- all.data[get(sale.price.name) > 50000]
+year.variables <- unique(all.data[, get(sale.year.name)])
+first.letter.variables <- unique(all.data[, get(building.class.first.letter)])
+residential.codes <- c("A", "B", "C", "D", "RR", "R1", "R2", "R3", "R4", "R6", "R7", "R8", "R9")
+borough_name <- c("Manhattan", "Bronx", "Brooklyn", "Queens", "Staten Island")
+
+residential.group.name <- "RESIDENTIAL UNITS GROUP"
+commercial.group.name <- "COMMERCIAL UNITS GROUP"
+total.units.group.name <- "TOTAL UNIT GROUP"
+land.group.name <- "LAND SQUARE FEET GROUP"
+gross.group.name <- "GROSS SQUARE FEET GROUP"
+
+cuts.residential <- c(0, 1, 2, 3, 5)
+cuts.commercial <- c(0, 1, 2, 3, 5)
+cuts.total <- c(0, 1, 2, 3, 5)
+cuts.land <- c(0, 100, 1000, 2000, 3000)
+cuts.gross <- c(0, 100, 1000, 2000, 3000)
+
+all.data[, eval(residential.group.name) := cut2(x = get(residential.name), cuts = cuts.residential)]
+all.data[, eval(commercial.group.name) := cut2(x = get(commercial.name), cuts = cuts.commercial)]
+all.data[, eval(total.units.group.name) := cut2(x = get(total.units.name), cuts = cuts.total)]
+all.data[, eval(land.group.name) := cut2(x = get(land.square.feet.name), cuts = cuts.land)]
+all.data[, eval(gross.group.name) := cut2(x = get(gross.square.feet.name), cuts = cuts.gross)]
+
+unique.residential.group <- all.data[, unique(get(residential.group.name))]
+unique.commercial.group <- all.data[, unique(get(commercial.group.name))]
+unique.total.units.group <- all.data[, unique(get(total.units.group.name))]
+unique.land.group <- all.data[, unique(get(land.group.name))]
+unique.gross.group <- all.data[, unique(get(gross.group.name))]
+
+all.data[, `Log Price` := log(get(sale.price.name))]
+
+year.variables <- unique(all.data[, get(sale.year.name)])
+first.letter.variables <- unique(all.data[, get(building.class.first.letter)])
+residential.codes <- c("A", "B", "C", "D", "RR", "R1", "R2", "R3", "R4", "R6", "R7", "R8", "R9")
+line.variables <- c(borough.name, building.class.first.letter)
+
+model.inputs <- c(borough.name, land.square.feet.name, gross.square.feet.name, sale.year, total.units.name, year.built.name, neighborhood.name)
+```
+
+```{r data_cleaning}
+all.data$`SALE DATE`<-ymd(as.Date(all.data$`SALE DATE`))    #conversion from factor to date format
+all.data$`SALE YEAR`<-year(all.data$`SALE DATE`)   #extracting year from sale date
+all.data$`SALE MONTH`<-month(all.data$`SALE DATE`) #extracting months from sale date
+occurences<-all.data[, .N, eval(sale.month)] #evenly distributed
+
+month.wise.sale<-all.data[,.("Mean Sale"=mean(`SALE PRICE`)),sale.month] 
+monthly.sales<-merge(month.wise.sale,occurences,by = sale.month)
+monthly.sales<-setorderv(monthly.sales,order=-1,cols="Mean Sale")
+
+setDT(all.data)
+all.data.tax.class.na<-all.data[is.na(`TAX CLASS AT PRESENT`),.SD] #20640 na values
+#option 1: to remove these 20640 values from dataset as most of other variables like land sqr feet are also 0 and also 20640 missing values in building class at present also correspond to these values
+
+#cleaning dataset
+all.data.clean<-all.data[!is.na(all.data$`TAX CLASS AT PRESENT`),.SD]
+all.data.clean<-all.data.clean[!is.na(`BUILDING CLASS CATEGORY`),.SD]
+all.data.clean$`YEAR BUILT`[all.data.clean$`YEAR BUILT`== 0] <- NA
+
+#making brackets for year built(grouping prop based on the year they were built in)
+cuts.year <- c(1900,1925,1950,1975,2000)
+all.data.clean[, eval(year.built.name) := cut2(x = get(year.built.name), cuts = cuts.year)]
+#removing 0 values from sale price
+all.data.clean$`SALE PRICE`[all.data.clean$`SALE PRICE`==0]<-NA
+all.data.clean$`LAND SQUARE FEET`[all.data.clean$`LAND SQUARE FEET`==0]<-NA
+all.data.clean$`GROSS SQUARE FEET`[all.data.clean$`GROSS SQUARE FEET`==0]<-NA
+
+all.data.clean<-all.data.clean[!is.na(all.data.clean$`YEAR BUILT`),.SD]
+all.data.clean<-all.data.clean[!is.na(all.data.clean$`SALE PRICE`),.SD]
+all.data.clean<-all.data.clean[!is.na(all.data.clean$`LAND SQUARE FEET`),.SD]
+all.data.clean<-all.data.clean[!is.na(all.data.clean$`GROSS SQUARE FEET`),.SD]
+all.data.clean<-select(all.data.clean,c(-7,-10))
+
+neigh<-all.data.clean[,.N,NEIGHBORHOOD]
+setorderv(neigh,col="N",order=-1)
+
+neigh.50<-neigh[1:50,]
+
+neigh.price<-all.data.clean[,.('mean price'=mean(`SALE PRICE`)),NEIGHBORHOOD]
+setorderv(neigh.price,cols="mean price",order=-1)
+
+neigh.analysis<-merge(neigh,neigh.price,by = neighborhood.name)
+setorderv(neigh.analysis,cols="mean price",order=-1)
+
+all.data.clean$`SALE PRICE`=scale(all.data.clean$`SALE PRICE`)
+
+a<-createDataPartition(all.data.clean$`SALE PRICE`,p = 0.70,groups =100,list=FALSE)
+traina<-all.data.clean[a,]
+testa<-all.data.clean[-a,]
+
+neigh.analysis.50<-neigh.analysis[1:50]
+selected.neighbors<-all.data.clean[get(neighborhood.name) %in% neigh.analysis.50$NEIGHBORHOOD]
+
+#split
+set.seed(100)
+n<-createDataPartition(selected.neighbors$`SALE PRICE`,p = 0.70,groups =100,list=FALSE)
+train.n<-selected.neighbors[n,]
+test.n<-selected.neighbors[-n,]
+```
+
+```{r functions}
+round.numerics <- function(x, digits){
+  if(is.numeric(x)){
+    x <- round(x = x, digits = digits)
+  }
+  return(x)
+}
+
+graph.choropleth <- function(data, year){
+  keep_cols = c(zip.name, sale.price.name)
+  data(zip.regions)
+  zip.prices <- data[, ..keep_cols]
+  zip.prices <- zip.prices[, mean(get(sale.price.name), na.rm = TRUE), by = zip.name]
+  colnames(zip.prices) <- c("region", "value")
+  zip.prices$value <- as.numeric(zip.prices$value)
+  zip.prices$region <- as.character(zip.prices$region)
+  zip.prices <- zip.prices[region %in% zip.regions$region,]
+  zip.prices <- zip.prices[value > 0,]
+  
+  plot.title <- c(year, " Average Sale Price by Zip Code")
+  plot.title <- paste(plot.title, collapse="")
+  
+  choro.graph <- zip_choropleth(zip.prices,
+                 zip_zoom = zip.prices$region,
+                 title       =  plot.title,
+                 legend      = "Average Sale Price")
+  return (choro.graph)
+}
+
+avg.sale.price.by <- function(data, by.column.names){
+  mean.price <- data[, .(`Avg. Price` = mean(get(sale.price.name), na.rm=TRUE)), by = by.column.names]
+  return (mean.price)
+}
+
+engagement.model <- function(dt, outcome.name, input.names){
+
+  res <- fit.model(dt = dt, outcome.name = outcome.name, input.names = input.names)
+  return(res)
+}
+fit.model <- function(dt, outcome.name, input.names, digits = 3){
+  the.formula <- reduce.formula(dt = dt, outcome.name = outcome.name, input.names = input.names)
+
+  mod <- lm(formula = the.formula, data = dt)
+  mod.summary <- linear.regression.summary(lm.mod = mod, digits = digits)
+  mod.summary.rounded <- mod.summary[, lapply(X = .SD, FUN = "round.numerics", digits = digits)]
+  return(mod.summary.rounded)
+}
+
+linear.regression.summary <- function(lm.mod, digits = 3){
+  library(data.table)
+  lm.coefs <- as.data.table(summary(lm.mod)$coefficients, keep.rownames = TRUE)
+  alpha = 0.05
+  z <- qnorm(p = 1-alpha/2, mean = 0, sd = 1)
+  lm.coefs[, Coef.Lower.95 := Estimate - z * `Std. Error`]
+  lm.coefs[, Coef.Upper.95 := Estimate + z * `Std. Error`]
+  return(lm.coefs)
+}
+
+create.formula <- function(outcome.name, input.names, input.patterns = NA, all.data.names = NA, return.as = "character"){
+  
+  variable.names.from.patterns <- c()
+  if(!is.na(input.patterns[1]) & !is.na(all.data.names[1])){
+    pattern <- paste(input.patterns, collapse = "|")
+    variable.names.from.patterns <- all.data.names[grep(pattern = pattern, x = all.data.names)]
+  }
+  all.input.names <- unique(c(input.names, variable.names.from.patterns))
+  all.input.names <- all.input.names[all.input.names != outcome.name]
+  
+  if(!is.na(all.data.names[1])){
+    all.input.names <- all.input.names[all.input.names %in% all.data.names]
+  }
+
+  input.names.delineated <- sprintf("`%s`", all.input.names)
+  the.formula <- sprintf("`%s` ~ %s", outcome.name, paste(input.names.delineated, collapse = "+"))
+  
+  if(return.as == "formula"){
+    return(as.formula(the.formula))
+  }
+  if(return.as != "formula"){
+    return(the.formula)
+  }
+}
+reduce.formula <- function(dt, outcome.name, input.names, input.patterns = NA, max.input.categories = 20, max.outcome.categories.to.search = 4, return.as = "formula"){
+  require(data.table)
+  dt <- setDT(dt)
+  
+  if(!(outcome.name %in% names(dt))){
+    return("Error:  outcome.name is not in names(dt).")
+  }
+  
+  pattern.names <- list()
+  if(!is.na(input.patterns[1])){
+    for(i in 1:length(input.patterns)){
+      pattern.names[[i]] <- names(dt)[grep(pattern = input.patterns[i], x = names(dt))]
+    }
+  }
+  all.input.names <- c(input.names, as.character(pattern.names))
+  
+  num.outcome.categories <- dt[!is.na(get(outcome.name)), length(unique(get(outcome.name)))]
+  
+  if(num.outcome.categories <= max.outcome.categories.to.search){
+    num.unique.tab <- dt[, lapply(X = .SD, FUN = function(x){return(length(unique(x[!is.na(x)])))}), .SDcols = input.names, by = outcome.name]
+    min.categories.tab <- num.unique.tab[, lapply(X = .SD, FUN = "min"), .SDcols = input.names]
+    
+    reduced.inputs <- names(min.categories.tab)[min.categories.tab >= 2]
+  }
+  if(num.outcome.categories > max.outcome.categories.to.search){
+    reduced.inputs <- all.input.names
+  }
+  
+  the.formula <- create.formula(outcome.name = outcome.name, input.names = reduced.inputs, all.data.names = names(dt), input.patterns = NA, return.as = return.as)
+  return(the.formula)
+}
+
+add.backtick <- function(x, include.backtick = "as.needed"){
+  if(include.backtick == "all"){
+    w <- 1:length(x)
+  }
+  if(include.backtick == "as.needed"){
+    w <- grep(pattern = " ", x = x, fixed = TRUE)
+  }  
+  if(length(w) > 0){
+    x[w] <- sprintf("`%s`", x[w])
+  }
+
+  return(x)
+}
+```
+
+Introduction
+=====================================  
+
+For our final project, we decided to analyze New York City real estate data between 2003 and 2017. The data is linked here: https://www1.nyc.gov/site/finance/taxes/property-annualized-sales-update.page
+
+Click on the tabs to see different reports.
+
+
+Choropleth Map
+=====================================
+
+Column {data-width=500}
+-------------------------------------
+
+```{r choropleth_map_1}
+inputPanel(
+  selectInput(inputId="year_variable_1", label = "Select Year 1:", choices = sort(year.variables), selected = sort(year.variables)[length(year.variables)]),
+  selectInput(inputId="building_class_type_1", label = "Select Building Class Type 1:", choices = first.letter.variables, selected = residential.codes, multiple = TRUE)
+)
+renderPlot({
+  choropleth.dat <- all.data[get(sale.year.name) == input$year_variable_1 & get(building.class.first.letter) %in% input$building_class_type_1,]
+  graph.choropleth(choropleth.dat, input$year_variable_1)
+})
+```
+
+Column {data-width=500}
+-------------------------------------
+
+```{r choropleth_map_2}
+inputPanel(
+  selectInput(inputId="year_variable_2", label = "Select Year 2:", choices = sort(year.variables), selected = sort(year.variables)[length(year.variables)-1]),
+  selectInput(inputId="building_class_type_2", label = "Select Building Class Type 2:", choices = first.letter.variables, selected = residential.codes, multiple = TRUE)
+)
+renderPlot({
+  choropleth.dat <- all.data[get(sale.year.name) == input$year_variable_2 & get(building.class.first.letter) %in% input$building_class_type_2,]
+  graph.choropleth(choropleth.dat, input$year_variable_2)
+})
+```
+
+Time-Series 
+=====================================
+
+Row {data-width=500}
+-------------------------------------
+
+```{r line_graph}
+inputPanel(
+  selectInput(inputId="line_variable", label = "Select Variable to Color By:", choices = line.variables, selected = line.variables[1]),
+  selectInput(inputId="line_building_class_type", label = "Select Building Class Type:", choices = first.letter.variables, selected = residential.codes, multiple = TRUE)
+)
+renderPlot({
+  if (input$line_variable == building.class.first.letter){
+    sub.dat <- all.data[get(building.class.first.letter) %in% input$line_building_class_type,]
+    mean.price <- avg.sale.price.by(sub.dat, c(sale.year.name, input$line_variable))
+    setorderv(x = mean.price, cols = "Sale Year", order = 1)
+    mean.price <- mean.price %>% mutate(`Building Class First Letter` = forcats::fct_reorder2(`Building Class First Letter`, `Sale Year`, `Avg. Price`))
+    
+    price.plot <- ggplot(mean.price, aes(`Sale Year`, as.integer(`Avg. Price`), color = `Building Class First Letter`)) + 
+                   geom_line(size = 1) + geom_point(aes(`Sale Year`,as.integer(`Avg. Price`))) +
+                   xlab("Sale Year") + ylab("Avg. Price") + labs(color = "Building Class") +
+                   scale_x_continuous(breaks = scales::pretty_breaks(length(unique(mean.price$`Sale Year`)))) +
+                   ggtitle("NYC Avg. Residential Real Estate Price by Building Class & Year") + theme_minimal(base_size = 14)
+    price.plot
+  }
+  else{
+    sub.dat <- all.data
+    mean.price <- avg.sale.price.by(sub.dat, c(sale.year.name, input$line_variable))
+    
+    mean.year.price <- avg.sale.price.by(dat, c(sale.year.name))
+    mean.year.price$`Fixed Borough` <- "Overall"
+
+    mean.price <- rbind(mean.price, mean.year.price)
+
+    setorderv(x = mean.price, cols = "Sale Year", order = 1)
+    mean.price <- mean.price %>% mutate(`Fixed Borough` = forcats::fct_reorder2(`Fixed Borough`, `Sale Year`, `Avg. Price`))
+    
+    price.plot <- ggplot(mean.price, aes(`Sale Year`, as.integer(`Avg. Price`), color = `Fixed Borough`)) + 
+                   geom_line(size = 1) + geom_point(aes(`Sale Year`,as.integer(`Avg. Price`))) +
+                   xlab("Sale Year") + ylab("Avg. Price") + labs(color = "Borough") +
+                   scale_x_continuous(breaks = scales::pretty_breaks(length(unique(mean.price$`Sale Year`)))) +
+                   scale_color_manual(values=c("#3399FF", "#000000", "#66CC00", "#FF6633", "#9966FF", "#0066CC")) +
+                   ggtitle("NYC Avg. Residential Real Estate Price by Borough & Year")  + theme_minimal(base_size = 14)
+    price.plot
+  }
+})
+```
+
+Building Classes & Boroughs
+==================================
+
+The description of all the building class codes can be found [here](https://www1.nyc.gov/assets/finance/jump/hlpbldgcode.html).
+
+Row {data-width=500}
+----------------------------------
+
+```{r class_borough}
+inputPanel(
+  selectInput(inputId="bar_building_class_type", label = "Select Building Class Type:", choices = first.letter.variables, selected = residential.codes, multiple = TRUE))
+renderPlot({
+  summary.building.codes <- all.data[, .N, by = c(building.class.first.letter, borough.name)]
+  summary.building.codes <- summary.building.codes[N > 250, ]
+  summary.building.codes <- summary.building.codes[get(building.class.first.letter) %in% input$bar_building_class_type]
+  
+  code.plot <- ggplot(summary.building.codes, aes(x = reorder(`Building Class First Letter`, -1*`N`), y = `N`, fill = `Fixed Borough`)) +
+             geom_bar(stat = 'identity', position="dodge") + xlab("Building Class Code") + ylab("Number of Sales") + labs(fill = "Borough") +
+             scale_fill_manual(values=c("#FF6633", "#66CC00", "#3399FF", "#9966FF", "#0066CC")) +
+             theme_minimal(base_size = 20)
+
+  code.plot
+})
+```
+
+Number of Sales by Borough
+======================================
+
+
+Row {data-height=500}
+-------------------------------------
+
+```{r respondents}
+inputPanel(
+  selectInput(inputId = "input_year", label = "Select Year:", 
+              choices = c(sale_year, 'All'), selected = 'All')
+)
+renderPlot({
+  
+  a <- matrix(0, nrow = 5, ncol = 2)
+  colnames(a) <- c('borough', 'number')
+  a <- as.data.frame(a)
+  a[, 1] <- borough_name
+  
+  if (input$input_year == 'All'){
+    for (i in 1:5){
+     sub <- all.data[all.data$BOROUGH == i, ]
+     a[i, 2] <- nrow(sub)
+    }
+    number_borough <- ggplot(data = a, aes(x = reorder(borough, -1*number), y = number)) +
+      geom_bar(stat="identity", width=0.5, color = "blue", fill = "#99CCFF") + 
+      xlab('Borough') + theme_minimal(base_size = 20)
+    return(number_borough)
+  }else{
+    for (i in 1:5){
+       sub <- all.data[all.data$BOROUGH == i & all.data$`SALE YEAR` == input$input_year, ]
+       a[i, 2] <- nrow(sub)
+    }
+    number_borough <- ggplot(data = a, aes(x = reorder(borough, -1*number), y = number)) +
+      geom_bar(stat = "identity", width = 0.5, color = "blue", fill = "#99CCFF") + 
+      xlab('Borough') + theme_minimal(base_size = 20)
+    return(number_borough)
+  }
+  
+})
+```
+
+Number of Sales by Year
+====================================
+
+
+Row {data-width=500}
+-------------------------------------
+
+```{r}
+inputPanel(
+  selectInput(inputId = "line_borough", label = "Select Borough:", 
+              choices = c(borough_name, 'Overall'), selected = "Overall", multiple = TRUE)
+)
+renderPlot({
+  
+  all.sales <- all.data[, .N, by = sale.year.name]
+  all.sales$`Fixed Borough` <- "Overall"
+  
+  borough.sales <- all.data[, .N, by = c(sale.year.name, borough.name)]
+  
+  all.sales <- rbind(borough.sales, all.sales)
+  
+  all.sales <- all.sales[get(borough.name) %in% input$line_borough,]
+  setorderv(x = all.sales, cols = "Sale Year", order = 1)
+  all.sales <- all.sales %>% mutate(`Fixed Borough` = forcats::fct_reorder2(`Fixed Borough`, `Sale Year`, N))
+  
+  number_year <- ggplot(data = all.sales, aes(x = `Sale Year`, y = N, color = `Fixed Borough`)) +
+      geom_line(size = 1) + xlab("Sale Year") + ylab("Number of Sales") + labs(color = "Borough") +
+      scale_x_continuous(breaks = scales::pretty_breaks(length(unique(all.sales$`Sale Year`)))) +
+      theme_minimal(base_size = 14) +
+      scale_color_manual(values = c("#000000", "#9966FF", "#66CC00", "#3399FF", "#0066CC", "#FF6633"))
+  number_year
+})
+```
+
+Linear Regression Model
+==================================
+
+Select the inputs you'd like to include in the linear regression model. Note that the dependent variable here is the scaled version of the price of each property.
+
+Row {data-height = 300}
+----------------------------------
+
+```{r engagement_models}
+inputPanel(
+  selectInput(inputId='model_inputs', label = "Inputs to Model", choice = model.inputs, selected = model.inputs, multiple = TRUE)
+)
+
+
+renderDataTable({
+  
+  datatable(engagement.model(train.n, sale.price.name, input$model_inputs))
+})
+
+```
