@@ -19,7 +19,6 @@ library(lubridate)
 library(Hmisc)
 library(choroplethr)
 library(choroplethrZip)
-library(randomForest) #random forest algo
 library(DataExplorer) #plot missing values
 library(caret) #splitting dataset
 library(Hmisc) #function cut2
@@ -590,18 +589,34 @@ Another thing to notice is that since we are using scaled prices as our dependen
 
 # Interpretation
 
-The results shows that, overall speaking, the New York real estate market suffers from the subprime mortgage crisis which happened from 2006 to 2010. There was a huge drop both in house price and in sale numbers. As the finance center of the world, the real estate market in New York is also closely related to the financial market. 
+As finance center in the world, the real estate market in New York is also closely related to the finance market. The results shows that, overall speaking, New York estate market suffers from the subprime mortgage crisis which happened from 2006 to 2010. There was a huge drop both in house price and in sales number, and till now, the market have not recovered to the level of 2003 yet. 
 
-Our results also confirmed some of our previous assumptions. Manhattan is the most expensive borough while Brooklyn is the second. House prices in Queens and Staten Isalnd are on a similar levels and these two boroughs are the cheapest in New York. 
+As for the condition in each borough, apparently, Manhattan is the most expensive borough, Brooklyn is the second. House prices in Queens and Staten Island are on the similar level and these 2 boroughs are the cheapest in New York. And in general, area that close to Manhattan tend to have higher price. 
+From the regression model, we can see that parameter 'neighborhood' is a significant parameter, which confirms the point of "Location! Location! Location!". And the newer the building is, the higher the house price can be. As for the built year, it depends on different age, there is no trend can be found. 
 
 # Assumptions
 
-In our neighborhood analysis, we assume that top 50 neighborhoods for analysis are based on the mean prices and occurences of the properties in these neighborhoods.
+Firstly, we made an assumption that our original data has contained the main factors that might affect New York real estate prices. In fact, from our daily experience, those most important factors when we considering the house price like geographical location, purchase time, housing type have all been concluded in our data. In our models, the significance of these factors and their impact on prices can also partly prove the rationality of this assumption.
 
 # Limitations and Uncertainties
 
-One limitation of using scaled prices is that it is not interpretable since the dependent variable is scaled and the results of regression model are not in actual numbers (as in the original format of dataset).
+First, apart from missing values, some of the record is obviously not correct. Such that in some of the record, the house price is 1 or some small numbers that cannot be the house price. What we do is that, when facing problems includes house price, only records with house price larger than 500000 are used, which is a rough selection. Records with  correct numbers maybe moved out and records with wrong number can still exists in the data we are using, which may cause baise in our analysis. 
+
+Second, the dataset we are using does not contain every house sale records. The data can be collected intensively from some specific neighborhood, and for some neighborhood, data can be relatively missing. This can lead to results with bias, such as the mean price per foot in Brooklyn is higher than that of Manhattan. A more accurate analysis can be done by a resample with equal sample size from each neighborhood. 
 
 # Areas of Future Investigation
 
+All the analysis was done based on the real estate data in New York city, however, as the finance center in the world, house market in New York must be closely related to the finance market and economics condition. Some economics factor such as GDP, CPI, population density should be added in the data in the future investigation.
+
+Locations is not just about neighborhood and borough, it also includes distance to and number of underground station, restaurants, whole food stores and so on. A high quality neighborhood with high living condition obviously can be more expensive than the neighborhood without any living facilities. However, due to the data limitation, investigation from living condition aspect cannot be done. It can be finished with a more complete dataset. 
+
+All our analysis is based on the data from the 5 boroughs in New York city, however, through Jersey City and Long Island City are not  New York administratively, they can be include to the Great New York area geographically, as we all know, a great amount people actually live in this two area and work in New York. There must be more interesting result can be found if the data from this 2 area can be include in the future investigation. 
+
+
 # References
+
+**Title, Author, Link**
+
+CPI Annual Averages, U.S. Department of Labor - Bureau of Labor Statistics, https://www.baruch.cuny.edu/nycdata/consumer_prices/cpi.htm
+
+"How Does a Quitclaim Deed Affect Your Mortgage?", CourthouseDirect.com Team, https://info.courthousedirect.com/blog/bid/309758/how-does-a-quitclaim-deed-affect-your-mortgage
