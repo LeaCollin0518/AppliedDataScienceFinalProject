@@ -1,5 +1,5 @@
 ---
-title: "Final Project Shiny App"
+title: "New York City Real Estate - Shiny App"
 output: flexdashboard::flex_dashboard
 runtime: shiny
 ---
@@ -302,13 +302,17 @@ add.backtick <- function(x, include.backtick = "as.needed"){
 Introduction
 =====================================  
 
-For our final project, we decided to analyze New York City real estate data between 2003 and 2017. The data is linked here: https://www1.nyc.gov/site/finance/taxes/property-annualized-sales-update.page
+For our final project, we decided to analyze New York City real estate data between 2003 and 2017. The data is linked [here](https://www1.nyc.gov/site/finance/taxes/property-annualized-sales-update.page). This application serves as a way to give the user more control over the analysis. Because there is so much data, we hope that the user can discover what they're looking for through this application.
 
 Click on the tabs to see different reports.
 
 
 Choropleth Map
 =====================================
+
+This tab shows the average price in each New York City zip code. There are two graphs so that you can perform a side-by-side comparison. 
+
+Select the year and building class types you want to compare. A description of the building class codes can be found [here](https://www1.nyc.gov/assets/finance/jump/hlpbldgcode.html).
 
 Column {data-width=500}
 -------------------------------------
@@ -341,10 +345,14 @@ renderPlot({
 Time-Series 
 =====================================
 
+This tab shows a time-series where you can categorize the lines by borough or by building class type. 
+
+Select the variable you would like to categorize by. Note that you can only select which building classes to include if you choose building class code in "Select Variable to Color By"
+
 Row {data-width=500}
 -------------------------------------
 
-```{r line_graph}
+```{r line_graph, fig.height = 15, fig.width = 15}
 inputPanel(
   selectInput(inputId="line_variable", label = "Select Variable to Color By:", choices = line.variables, selected = line.variables[1]),
   selectInput(inputId="line_building_class_type", label = "Select Building Class Type:", choices = first.letter.variables, selected = residential.codes, multiple = TRUE)
@@ -389,7 +397,9 @@ renderPlot({
 Building Classes & Boroughs
 ==================================
 
-The description of all the building class codes can be found [here](https://www1.nyc.gov/assets/finance/jump/hlpbldgcode.html).
+This tab shows the number of properties sold in each borough and of each building class type. 
+
+Select the building classes you want to look at. The description of all the building class codes can be found [here](https://www1.nyc.gov/assets/finance/jump/hlpbldgcode.html).
 
 Row {data-width=500}
 ----------------------------------
@@ -414,6 +424,9 @@ renderPlot({
 Number of Sales by Borough
 ======================================
 
+This tab shows the number of sales in each borough by year. 
+
+Select the year you want to look at. 
 
 Row {data-height=500}
 -------------------------------------
@@ -456,11 +469,14 @@ renderPlot({
 Number of Sales by Year
 ====================================
 
+This tab shows the number of sales as a time-series.
+
+Select which borough you want to look at. Note that the **Overall** option is to include information from all the boroughs. 
 
 Row {data-width=500}
 -------------------------------------
 
-```{r}
+```{r, fig.height = 15, fig.width = 15}
 inputPanel(
   selectInput(inputId = "line_borough", label = "Select Borough:", 
               choices = c(borough_name, 'Overall'), selected = "Overall", multiple = TRUE)
@@ -489,6 +505,9 @@ renderPlot({
 
 Linear Regression Model
 ==================================
+
+This tab shows the coefficients from a linear regression model output. 
+
 
 Select the inputs you'd like to include in the linear regression model. Note that the dependent variable here is the scaled version of the price of each property.
 
