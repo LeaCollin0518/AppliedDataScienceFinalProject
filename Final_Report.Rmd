@@ -228,9 +228,6 @@ year.borough.price.plot <- ggplot(all.year.price, aes(`Sale Year`, as.integer(`A
                    ggtitle("NYC Avg. Real Estate Price by Borough and Year") + theme_gray(base_size = 14)
 
 year.borough.price.plot
-
-# "#3399FF", "#000000", "#66CC00", "#FF6633", "#9966FF", "#0066CC"
-# Manhattan, Overall, Brooklyn, Bronx, Queens, Staten Island
 ```
 
 Not too surprisingly, Manhattan sales prices are the highest among the five boroughs. In recent years, we have seen Brooklyn becoming a more sought-after neighborhood which has led to increases in higher real estate prices, as corroborated by this graph. We should note that since this dataset does not only include apartment buildings, that that is probably also the reason that we see such high real estate prices in Manhattan. Manhattan has many more large buildings than, say, Staten Island which is much more residential. What is also interesting to note is that the Manhattan line follows basically the same trend as the overall city trend because it has the highest prices and is dominating the trend because of it. We see in all five boroughs and the overall trend that there is a dip in prices from 2007 to 2009, very likely caused by the financial crisis. This drop is most noticeable in Manhattan. 
@@ -276,7 +273,7 @@ colnames(number_sale_year)[2] <- 'Number of Sale'
 number_year <- ggplot(data = number_sale_year, aes(x = `SALE YEAR`, y = `Number of Sale`, color = Region, group = Region)) +
   geom_line(size = 1) + 
   xlab('Year') +
-  ylab('Number of Sale') +scale_color_manual(values = c("#FF6633", "#66CC00", "#3399FF", "#000000", "#9966FF", "#0066CC")) +
+  ylab('Number of Sales') +scale_color_manual(values = c("#FF6633", "#66CC00", "#3399FF", "#000000", "#9966FF", "#0066CC")) +
   theme_gray(base_size = 14)
 number_year
 
@@ -284,11 +281,11 @@ number_year
 # Manhattan, Overall, Brooklyn, Bronx, Queens, Staten Island
 ```
 
-Overall speaking, the number of sales in New York city dropped at the first 7 years of the period and then slightly rised after 2010. As we all know that, a subprime mortgage crisis happened from early 2006 to 2010, this can be the main reason of the huge drop in number of house sales in the same period, the values drops from over 125000 to below 75000. After 2010, the house market starts to recover, a raise to 870000 can be observed from 2010 to 2012, after that it remains at this level, still far from the level of 2003. 
+Overall, the number of sales in New York City dropped during the first 7 years of the observed time period and then slightly rose between 2009 and 2010. The likely reason for the huge drop is the subprime mortgage crisis that we have already observed in a few of our graphs. We see the number of sales drop from 125,000 in 2006 to below 75,000 in 2010. After 2010, the housing market starts to recover and rises to about 87,000 from 2010 to 2012. After 2012, it remains at this level, still far from the numbers in 2003. 
 
-As for the tend in each borough, Satene Island and Bronx always had the lowest sales nuber and Queens always had the highest. All the 5 borough were effected by the subprime mortgage crisis. Except for Manhattan, all other borough has the similar trend as the the overall condition. As for manhattan, the sales number flatuated during the period. It was raising slightly from 2003 to 2006 when at the smae time the sales number in all other boroughs was decreasing and it as decreasing slightly from 2013 to 2017 when the sales number in all other borough was inceasing. The reason why this is happening required further investigation with data with popultion, economics and finance condition in each borough. 
+As for the trend in each borough, Staten Island and the Bronx always had the lowest sales numbers and Queens almost always had the highest. All 5 boroughs were affected by the housing crisis. Apart from Manhattan, all other boroughs had similar trends to the overall trend. Manhattan sales numbers fluctuated more during this time frame. Numbers were rising slightly from 2003 to 2006 whereas all other borough sales were decreasing. It was decreasing slightly from 2013 to 2017 while the other boroughs were increasing their numbers. The explanation for this requires further investigation, perhaps into data with population, economics and financial conditions in each borough. 
 
-We can also take a look at a breakdown of these building class codes across the boroughs. Here, we have a bar graph of the number of buildings of each code class in the dataset in each borough. Because there are so many building codes and many had such a negligible amount sold in the data, we plotted only the rows that had more than 250 sold in the 15 years. Note: we are showing the raw counts, not the proportions. 
+Now we look more into the building class codes. Here, we visualize the number of buildings of each code class in the dataset in each borough. Because there are so many building codes and many had such a negligible amount sold in the data, we plotted only the rows that had more than 250 sold in the 15 years. Note: we are showing the raw counts, not the proportions. 
 
 ```{r building_codes, fig.height = 10, fig.width = 20, echo = FALSE}
 summary.building.codes <- all.data[, .N, by = c(building.class.first.letter, borough.name)]
@@ -305,10 +302,10 @@ code.plot
 
 There are a few interesting things that stand out from this graph. For one, Manhattan is the only borough that has buldings of type **H** and **L**. Buildings with a class code starting with **H** are generally hotels, motels, or hostels and **L** buildings are lofts. The hotels being sold only in Manhattan isn't too surprising as we know that there are many hotels there and the other boroughs are generally more residential. This doesn't mean that there are no hotels in the other boroughs however, it simply shows that none were **sold** during this 15 year period of time. Buildings with an **R** class code seem to be some of the most popular, but they are also the most varied According to our data source, these properties range from indoor parking and office spaces to condos in buildings with other residential units. Building codes of class **A** are all of the one-family properties and we see that Queens and Staten Island have the highest number of those (Manhattan barely has any). Brooklyn and Queens have almost the same number of **B** properties sold, which are all two-family properties. All of this once again reaffirms our idea that Manhattan is mainly large buildings and the smaller boroughs are more residential. Some of the lowest counts in building class codes are **I** and **W**. **I** codes are for buildings such as nursing homes and hospitals and **W** is for schools and university buildings. 
 
-We also looked at the relationship between price per square foot and borough.
+We also looked at the relationship between price per square foot and borough. Because many data points did not have square footage listed or had nonsensical values for gross square feet (ie 1), we decided to only plot residential properties. 
 
-```{r mean_median, echo = F}
-sub <- all.data[all.data$`SALE PRICE` != 0 & all.data$`GROSS SQUARE FEET` != 0 & all.data$`SALE PRICE` > 500000, ]
+```{r mean_median, echo = F, fig.width = 10}
+sub <- residential.properties[residential.properties$`SALE PRICE` != 0 & residential.properties$`GROSS SQUARE FEET` != 0]
 sub$`PRICE PER FEET` <- sub$`SALE PRICE`/sub$`GROSS SQUARE FEET`
 median_price_feet_2 <- as.data.frame(sub[, .(price = median(x = `PRICE PER FEET`, na.rm = T)), keyby = BOROUGH])
 mean_price_feet_2 <- as.data.frame(sub[, .(price = mean(x = `PRICE PER FEET`, na.rm = T)), keyby = BOROUGH])
@@ -322,12 +319,13 @@ price_borough <- ggplot(data = price_feet_2, mapping = aes(x = reorder(factor(BO
   scale_fill_manual(values = c('steelblue', 'orange')) +
   xlab('Borough') +
   ylab('Price Per Square Foot') +
-  geom_text(aes(label = price), vjust = 1.5, colour = "white", position = position_dodge(.9), size = 4)
+  geom_text(aes(label = price), vjust = 1.5, colour = "white", position = position_dodge(.9), size = 4) +
+  theme_gray(base_size = 14)
 
 price_borough
 ```
 
-The plot shows that Brooklyn has the highest price for unit square foot, which is around $1500, almost doubled the price in Manhattan. This is contradict to the intuition of house price condition in New York city that Manhattan is the most expensive borough. The reason result in this might be that most of data for Brooklyn comes from a relatively rich neighborhood in Brooklyn, so that the mean price per square foot is overestimated and the data for Manhattan is not complete so the price for this borough is underestimated. To avoid this the efeect of extreme values, median was used instead of mean value. The plot shows that the price in Manhattan is highest, which is around 500, Queens ranks the second, with a price around 330. Brooklyn, Staten island and Bronx ranked from 3 to 5, whcih is reasonable. It is also obvious that in each borough, mean priceis higher than median price, which means that in general, houses iwth higher quality can have a very high price. This phenamenna is extrenmly obvious in Brooklyn and Manhattan, where stands many luxary residentials. 
+This plot shows trends that confirm our intuitions and what other graphs have already shown us: Manahattan is the most expensive borough. We looked at both the mean and median as the median is more robust to outliers but the patterns are generally the same for both, except the median price per square foot is lower in Brooklyn than in Queens even though the mean ranking is reversed. 
 
 We can also look at how price per square foot has changed across the boroughs in time.
 
@@ -351,7 +349,8 @@ price_year <- ggplot(data = price_feet_2_time, aes(x = `SALE YEAR`, y = price, c
 
 price_year
 ```
-In general, the price per foot in New York city was raising in the 14 years, from around \$250 to around \$400. The most expensive borough is always Manhattan, after 2006, the price in Manhattan is much higher than the other 4 borough, and the cheapest borough is always Bronx. The effect of subprime mortbage cirsis cannot be observed in the price arcoss New York. Even we look into each borough, this effect is still limited in every borough except Manhattan. From 2008 and 2009, there is a sharp drop in the price per foot in Manhattan, the reason can be that, most of costumers for real estate in Manhattan are investors, bankers, business man or financail firms, and they are also the ones who lost most during the financail crisis, so that is why house market in Manhattan suffers most from the financial crisis. An other intersting thing is that, as the first 3 years, the house price in each borough was not as seperated as in the latest year. part of the reason can be the un-completenesss of the dataset. An other reason can be that price in New York increased a lot during the period. By checking data provided by Barach College(https://www.baruch.cuny.edu/nycdata/consumer_prices/cpi.htm), CPI in New York have raised from 197.8 in 2003 to 268.5 in 2017, this may magnifies the gap among house price in different borough.  
+
+In general, the price per square foot in New York city was rising over the 15 years, from about \$250 to about \$400. The most expensive borough is always Manhattan. We see that in 2006, the price in Manhattan is much higher than the other 4 boroughs. The least expensive borough is always the Bronx. The effect of the financial crisis is not too noticeable in the "Overall" line. Even when we look at each borough, the effect is still only drastically seen in Manhattan. From 2008 to 2009 there is a sharp drop in the price per square foot in Manhattan. These drops could be because most of the costumers for real estate in Manhattan are investors, bankers, business men or financial firms and they are also the ones who lost the most during the financail crisis. We also notice that the price per square foot between the boroughs is more similar in the first three years than in the later years of the data. By checking data provided by [Barach College](https://www.baruch.cuny.edu/nycdata/consumer_prices/cpi.htm), CPI in New York in New York raised from 197.8 in 2003 to 268.5 in 2017, which may magnify the gap amonst housing prices in different boroughs. 
 
 ```{r tax_class_box, echo = FALSE}
 
