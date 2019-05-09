@@ -19,6 +19,17 @@ library(lubridate)
 library(Hmisc)
 library(choroplethr)
 library(choroplethrZip)
+library(randomForest) #random forest algo
+library(DataExplorer) #plot missing values
+library(caret) #splitting dataset
+library(Hmisc) #function cut2
+library(dlookr) #find skewness
+library(glmnet) #lasso
+library(e1071) #skewness func
+library(bit64)
+library(corrplot)
+library(rpart)
+library(rpart.plot)
 ```
 
 ```{r load_data, include = FALSE}
@@ -53,30 +64,21 @@ graph.choropleth <- function(data, year){
   return (choro.graph)
 }
 
-line.plot <- function(data, facet_variable = ''){
-  if (facet_variable != ''){
-    mean.price <- avg.sale.price.by(data = data, c(sale.year.name))
-    setorderv(x = mean.price, cols = "Sale Year", order = 1)
-    price.plot <- ggplot(mean.price, aes(`Sale Year`, as.integer(`Avg. Price`))) + 
-                   geom_line(size = 1) + geom_point(aes(`Sale Year`,as.integer(`Avg. Price`))) +
-                   xlab("Sale Year") + ylab("Avg. Price") +
-                   scale_x_continuous(breaks = scales::pretty_breaks(length(mean.price$`Sale Year`))) +
-                   ggtitle("NYC Avg. Real Estate Price by Year") 
-    return (price.plot)
 
-  }
-  else{
-    mean.price <- avg.sale.price.by(data, c(sale.year.name, facet_variable))
-    setorderv(x = mean.price, cols = "Sale Year", order = 1)
-    
-    price.plot <- ggplot(mean.price, aes(`Sale Year`, as.integer(`Avg. Price`), color = facet_variable)) + 
-                   geom_line(size = 1) + geom_point(aes(`Sale Year`,as.integer(`Avg. Price`))) +
-                   xlab("Sale Year") + ylab("Avg. Price") + labs(color = facet_variable) +
-                   scale_x_continuous(breaks = scales::pretty_breaks(length(mean.price$`Sale Year`))) +
-                   ggtitle("NYC Avg. Real Estate Price by  and Year") 
-    return (price.plot)
-  }
-  
+## Data size function
+set.size<-function(n,dat){
+  the.rows<-sample(x=1:nrow(dat),size=n,replace = FALSE)
+  return(dat[the.rows,])
+}
+
+linear.regression.summary <- function(lm.mod, digits = 3, alpha = 0.05) {
+  lm.coefs <- as.data.table(summary(lm.mod)$coefficients,
+  keep.rownames = TRUE)
+  setnames(x = lm.coefs, old = "rn", new = "Variable")
+  z <- qnorm(p = 1 - alpha/2, mean = 0, sd = 1)
+  lm.coefs[, Coef.Lower.95 := Estimate - z * `Std. Error`]
+  lm.coefs[, Coef.Upper.95 := Estimate + z * `Std. Error`]
+  return(lm.coefs[])
 }
 ```
 
@@ -135,6 +137,41 @@ all.data[, `Building Class First Letter` := substr(get(building.class.sale.name)
 dat <- all.data[get(sale.price.name) > 50000]
 ```
 
+```{r fix sale.date, include = FALSE}
+all.data$`SALE DATE`<-ymd(all.data$`SALE DATE`)    #conversion from factor to date format
+all.data$`SALE YEAR`<-year(all.data$`SALE DATE`)   #extracting year from sale date
+all.data$`SALE MONTH`<-month(all.data$`SALE DATE`) #extracting months from sale date 
+```
+
+```{r cleaning_data, include = FALSE}
+setDT(all.data)
+all.data.tax.class.na<-all.data[is.na(`TAX CLASS AT PRESENT`),.SD] #20640 na values
+#option 1: to remove these 20640 values from dataset as most of other variables like land sqr feet are also 0 and also 20640 missing values in building class at present also correspond to these values
+
+#cleaning dataset
+all.data.clean<-all.data[!is.na(all.data$`TAX CLASS AT PRESENT`),.SD]
+all.data.clean<-all.data.clean[!is.na(`BUILDING CLASS CATEGORY`),.SD]
+all.data.clean$`YEAR BUILT`[all.data.clean$`YEAR BUILT`== 0] <- NA
+
+#making brackets for year built(grouping prop based on the year they were built in)
+cuts.year <- c(1900,1925,1950,1975,2000)
+all.data.clean[, eval(year.built.name) := cut2(x = get(year.built.name), cuts = cuts.year)]
+#removing 0 values from sale price
+all.data.clean$`SALE PRICE`[all.data.clean$`SALE PRICE`==0]<-NA
+all.data.clean$`LAND SQUARE FEET`[all.data.clean$`LAND SQUARE FEET`==0]<-NA
+all.data.clean$`GROSS SQUARE FEET`[all.data.clean$`GROSS SQUARE FEET`==0]<-NA
+
+all.data.clean<-all.data.clean[!is.na(all.data.clean$`YEAR BUILT`),.SD]
+all.data.clean<-all.data.clean[!is.na(all.data.clean$`SALE PRICE`),.SD]
+all.data.clean<-all.data.clean[!is.na(all.data.clean$`LAND SQUARE FEET`),.SD]
+all.data.clean<-all.data.clean[!is.na(all.data.clean$`GROSS SQUARE FEET`),.SD]
+all.data.clean<-select(all.data.clean,c(-7,-10))
+```
+
+```{r scaling the prices, include = FALSE}
+all.data.clean$`SALE PRICE`=scale(all.data.clean$`SALE PRICE`)
+```
+
 # Introduction
 
 For our final project, we looked at New York real estate data ranging from 2003 to 2017. The data files include information such as neighborhood, building type, number of units, among many other features. The overarching question of our project is: what factors are important in determining sale price in New York? Throughout this project, we performed extensive exploratory data analysis and build several machine learning models to address this question. However, our analysis was not only limited to this question, we also try to detect facts and trends in New York real estate market through different visualization methods, such as the effect of the 2008 financial crisis to the real estate market and how the price changed during the past 14 years.
@@ -177,7 +214,7 @@ colSums(is.na(all.data))
 visna(all.data, sort = "b")
 ```
 
-We see that the most common columns that have missing values are "EASE-MENT" and "APARTMENT NUMBER". Both of these have missing values in more than half of all rows. It is probably safe to get rid of these columns and ignore them both in our exploratory analysis and our machine learning model as they likely do not hold any valuable information with so many missing values. It may have been interesting to look at apartment number, to see how the floor of the apartment (ie floor in the building) affects the apartment's price. Otherwise the only other missing valued columns are "TAX CLASS AT PRESENT", "BUILDING CLASS AT PRESENT", "BUILDING CLASS CATEGORY", and "ADDRESS". Address has only 7 missing values in over 1.4 million rows and there are many other columns that indicate the location of these buildings. We see from the graph that Tax Class at Present is always missing whenever Building Class at Present is missing. According to the data source, Tax Class at Present is "based on the use of the property" and Building Class at Present is "used to describe a property’s constructive use", so these two variables are very related. These two variables have the next highest number of missing values, but still only have about 20,000 missing which is not much when compared to the number of rows. 
+We see that the most common columns that have missing values are "Ease-ment" and "Apartment Number". Both of these have missing values in more than half of all rows. It is probably safe to get rid of these columns and ignore them both in our exploratory analysis and our machine learning model as they likely do not hold any valuable information with so many missing values. It may have been interesting to look at apartment number, to see how the floor of the apartment (ie floor in the building) affects the apartment's price. Otherwise the only other missing valued columns are "Tax Class at Present", "Building Class at Present", "Building Class Category", and "Address". Address has only 7 missing values in over 1.4 million rows and there are many other columns that indicate the location of these buildings. We see from the graph that Tax Class at Present is always missing whenever Building Class at Present is missing. According to the data source, Tax Class at Present is "based on the use of the property" and Building Class at Present is "used to describe a property’s constructive use", so these two variables are very related. These two variables have the next highest number of missing values, but still only have about 20,000 missing which is not much when compared to the number of rows. 
 
 ```{r fix_na, include = FALSE}
 all.data$`EASE-MENT` <- NULL
@@ -209,6 +246,8 @@ sale.density
 To answer our questions about the data and the topic, we first got acquainted with what was going on by creating different visualizations to inspect each variable. Our graphs included anything from density curves to visualized continuous variables to bar plots for categorical variables. We also produced line graphs to easily see trends over time. A lot of these graphs were included in our interactive component so that any reader can inspect the data on their own. The interactive component is actually very important because since there are so many years of data, it is hard to create so many visualizations in a static report. The interactive component easily allows the user to discover trends in different years and different variables. All of these graphs can be found in the following **Results** section. 
 
 # Results
+
+### Exploratory Data Analysis
 
 Before we jumping into building our machine learning model, we did some detailed exploratory data analysis. This analysis starts with looking at the overall trend of the average sale price. Below, we see a graph of this trend for each borough and the overall dataset. 
 
@@ -257,6 +296,17 @@ year.code.price.plot
 ```
 
 We see that the ranking by price remains pretty consistent throughout the 15 year range. **C** and **D** are consistently more expensive, with **D** being the most, and **B** and **A** buildings are fairly similar in average price across the years. All of the **D** buildings are elevator buildings which could explain why they are more expensive. Additionally, the **D** class buildings have "luxury apartments" which could be bumping up the average price. What's also interesting is that **D** buildings have more volatile average prices, though this could be due to the fact that the graph is on their scale and so we can't see the volatility in the lower average prices. Again we see a big dip in 2009 after the financial crisis.
+
+```{r points_by_month, echo = FALSE}
+occurences<-all.data[, .N, eval(sale.month)] #evenly distributed
+
+month.wise.sale<-all.data[,.("Mean Sale"=mean(`SALE PRICE`)),sale.month] 
+monthly.sales<-merge(month.wise.sale,occurences,by = sale.month)
+monthly.sales<-setorderv(monthly.sales,order=-1,cols="Mean Sale")
+datatable(monthly.sales)
+```
+
+We see that December, June and January have the highest average sale price (going higher than 1 million dollars) whereas properties sold in March, September remain less expensive. We also see that the number of properties sold remains fairly consistent across all months.
 
 We now turn our attention to the number of sales in each borough over the years. 
 
@@ -396,15 +446,33 @@ graph.choropleth(residential.properties, 2017)
 
 Now that we are only including residential properties, the sales prices are easier to compare between parts of New York. Not surprisingly, many of the most expensive properites are in Manhattan. We see that Staten Island and the Bronx are probably the most affordable. Brooklyn and Queens are also more affordable except the parts that are closest to Manhattan are pricier. Even within Manhattan we see trends that make sense. Midtown and Downtown Manhattan see much higher average prices than anything at or above Central Park. 
 
+We can look more closely at neighborhood by examining their occurrences and mean prices. 
+
+```{r neighborhood analysis, echo = FALSE}
+neigh<-all.data.clean[,.N,NEIGHBORHOOD]
+setorderv(neigh,col="N",order=-1)
+
+neigh.50<-neigh[1:50,]
+
+neigh.price<-all.data.clean[,.('mean price'=mean(`SALE PRICE`)),NEIGHBORHOOD]
+setorderv(neigh.price,cols="mean price",order=-1)
+
+neigh.analysis<-merge(neigh,neigh.price,by = neighborhood.name)
+setorderv(neigh.analysis,cols="mean price",order=-1)
+datatable(neigh.analysis)
+```
+
+Results show us that Midtown CBD and KIPS Bay are neighborhoods with the highest mean sale prices. However, we also notice that apart from mean prices, the occurences of these properties are important to note since a few properties with higher average values can undermine the influence of high numbers of properties with slightly lesser mean price. We took this into account for our analyis.
+
 Now we'll take a look at how the total number of units and the square footage affect price. Without loss of generality, we will mainly focus on total units and land square feet here (and in fact the `total units` is just the sum of the residential units and commercial).
 
-```{r scatter_unit_square.feet_1, echo = FALSE}
+```{r scatter_unit_square.feet_1, echo = FALSE, cache= TRUE}
 ggplot(data = dat) +
   geom_point(mapping = aes(x = get(scaled.total.units), y = get(scaled.price.name))) +
   labs(title = "Scaled NYC Real Estate Price by Total Units", x = "Scaled Total Units", y = "Scaled Sale Price")
 ```
 
-```{r land_scatter, echo = FALSE}
+```{r land_scatter, echo = FALSE, cache = TRUE}
 ggplot(data = dat) +
   geom_point(mapping = aes(x = get(scaled.square.feet), y = get(scaled.price.name))) +
   labs(title = "Scaled NYC Real Estate Price by Land Square feet", x = "Scaled Land Square Feet", y = "Scaled Sale Price")
@@ -412,14 +480,14 @@ ggplot(data = dat) +
 
 From these graphs, we see that a few points are outliers. We also see that most of the data is concentrated in the bottom left. Because of this, we're subsetting the data so that total units is greater than 0 and less than 5000, the land square feet is greater than 0 and less than 50,000,000, and sale price is greater than 50,000 and less than 5,000,000.
 
-```{r scatter_unit_square.feet_2, echo = FALSE}
+```{r scatter_unit_square.feet_2, echo = FALSE, cache = TRUE}
 sub.data.unit.feet <- all.data[get(total.units.name) > 0 & get(total.units.name) < 5000 & get(land.square.feet.name) > 0 & get(land.square.feet.name) < 50000000 & get(sale.price.name) > 50000 & get(sale.price.name) < 5000000, ]
 ggplot(data = sub.data.unit.feet) +
   geom_point(mapping = aes(x = get(scaled.total.units), y = get(scaled.price.name))) +
   labs(title = "Scaled NYC Real Estate Price by Total Units", x = " Scaled Total Units", y = "Scaled Sale Price")
 ```
 
-```{r scatter_scaled, echo = FALSE}
+```{r scatter_scaled, echo = FALSE, cache = TRUE}
 scatter_sub_scaled <- ggplot(data = sub.data.unit.feet) +
   geom_point(mapping = aes(x = get(scaled.square.feet), y = get(scaled.price.name))) +
   labs(title = "Scaled NYC Real Estate Price by Land Square feet", x = "Scaled Land Square Feet", y = "Scaled Sale Price")
@@ -427,6 +495,20 @@ scatter_sub_scaled
 ```
 
 We now see a slight positive correlation between total units and price and land square footage and price, but it is very slight. 
+
+We further investigated the relation between sale price and certain relevant variables by finding the correlations between them. 
+
+```{r correlations}
+m<-cor(all.data.clean$`GROSS SQUARE FEET`,all.data.clean$`SALE PRICE`) 
+n<-cor(all.data.clean$`LAND SQUARE FEET`,all.data.clean$`SALE PRICE`)  
+o<-cor(all.data.clean$`TOTAL UNITS`,all.data.clean$`SALE PRICE`)
+
+correlations<-all.data.clean[,.("Land Square Feet and Sale Price"=n,"Gross Square Feet and Sale Price"=m,"Total Units and Sale Price"=o)]
+correlations<-round(correlations,3)
+datatable(correlations)
+```
+
+Gross square feet and total units are both fairly strongly correlated with sale price (0.475 and 0.436 respectively). However, land square feet and sale price show a fairly weak correlation (0.01). Land square feet is defined as: the land area of the property listed in square feet. Gross square feet is defined as: the total area of all the floors of a building as measured from the exterior surfaces of theoutside walls of the building, including the land area and space within any building or structure on the property. 
 
 Now we turn our attention to the count of the different number of total units and land square footage. We binned these values since there were not many distinct values and so that we could use a bar plot as our visualization.
 
@@ -448,6 +530,64 @@ ggplot(data = land.Num, mapping = aes(x = get(land.group.name), y = N)) +
 
 One interesting thing here is that most of the properties have total units lower than 5; however the bar plot tells us that the difference in price is mainly reflected in the group of total units higher than 5. Another interesting finding is that there is an obvious gap between the first group and the third when we are considering land square footage. It may be because the data actually splits nicely into properties that are smaller and residential and properties that are more commercial. We thought it may be reasonable to split the data into two large groups (small properties vs. large) but then we see from that the scatter plot that land square footage is not so predictive. We hold out for our linear regression models for further analysis.
 
+### Machine Learning
+
+We are **finally** ready to fit some machine learning models. 
+
+#### Model 1 
+
+Once we cleaned the data, we built a simple linear regression model based on the variables which seemed relevant (based on intuition). These variables include year built, borough, total units, land square feet, gross square feet, sale year and sale month. 
+
+```{r model 1}
+#splitting
+set.seed(100)
+all.data.clean$`SALE PRICE` <- as.numeric(all.data.clean$`SALE PRICE`)
+a<-createDataPartition(all.data.clean$`SALE PRICE`,p = 0.70,groups =100,list=FALSE)
+traina<-all.data.clean[a,]
+testa<-all.data.clean[-a,]
+
+#model
+mod1<-lm(`SALE PRICE`~`Fixed Borough`+`LAND SQUARE FEET`+`GROSS SQUARE FEET`+`SALE YEAR`+`TOTAL UNITS`+`YEAR BUILT`+`SALE MONTH`,data=traina)
+summary(mod1) #0.49
+mod1.pred<-predict(mod1,newdata=testa)
+mod1.rmse = sqrt(mean((mod1.pred-testa$`SALE PRICE`)^2)) #0.83
+```
+
+W get an r-squared value of 0.4162 based on the variables used in model 1. We notice that most of these variables are statistically significant and hence have an impact in sale prices of different types of properties. The variables that are not significant are total units, year build [1900-1925) and sale month.
+
+Now intuition says that location plays a major role in creating a good model when it comes to predicting property prices. Our major variables for location are Boroughs and Neighborhood. In our first model we included boroughs but not neighborhood. We think neighborhood should give more precise information to our model and we tried to look at the improvement by just adding this variable in our next predictive model.
+
+```{r model2,warning=FALSE}
+mod2<-lm(`SALE PRICE`~`Fixed Borough`+`LAND SQUARE FEET`+`GROSS SQUARE FEET`+`SALE YEAR`+`TOTAL UNITS`+`YEAR BUILT`+`SALE MONTH`+NEIGHBORHOOD,data=traina)
+summary(mod2) #0.50
+```
+
+The results show us that in terms of r-squared value, the model has improved from 0.41 to 0.50 which is a good sign and tells us that neighborhood has an improvement on the model. The challenge is that many neighborhoods do not have enough representation in the dataset and might hamper us from getting good predictions as we may overestimate the factor of location by including all the neighborhoods.
+
+To yield much better results from our predictive model, we decided to only include neighborhoods which are representative of the properties by taking their occurences and mean prices into account. We decided to go for top 50 representative neighborhoods (look at assumptions section)
+
+```{r neigh 50,warning=FALSE}
+neigh.analysis.50<-neigh.analysis[1:50]
+selected.neighbors<-all.data.clean[get(neighborhood.name) %in% neigh.analysis.50$NEIGHBORHOOD]
+
+#split
+set.seed(100)
+n<-createDataPartition(selected.neighbors$`SALE PRICE`,p = 0.70,groups =100,list=FALSE)
+train.n<-selected.neighbors[n,]
+test.n<-selected.neighbors[-n,]
+
+#model
+mod.n<-lm(`SALE PRICE`~NEIGHBORHOOD+`Fixed Borough`+`LAND SQUARE FEET`+`GROSS SQUARE FEET`+`SALE YEAR`+`TOTAL UNITS`+`YEAR BUILT`,data=train.n)
+summary(mod.n)
+predict.n<-predict(mod.n,newdata=test.n)
+rmse.pred.copy<-sqrt(mean((predict.n-test.n$`SALE PRICE`)^2)) #2.13 (different test data than first 2 models)
+
+```
+
+We see some interesting results with this approach: the r-squared value goes up to 0.59. This shows us that neighborhood is important but it is more beneficial to filter the information as too much information can ultimately overfit the model. However, for this project we did not use Boosting methods which might take this complexity into account. Still we realize that a cleansed neighborhood column works better for this linear regression model. 
+
+Another thing to notice is that since we are using scaled prices as our dependent variable, we get estimate values which are scaled and not in terms of actual sale prices.
+
 # Interpretation
 
 The results shows that, overall speaking, the New York real estate market suffers from the subprime mortgage crisis which happened from 2006 to 2010. There was a huge drop both in house price and in sale numbers. As the finance center of the world, the real estate market in New York is also closely related to the financial market. 
@@ -456,80 +596,12 @@ Our results also confirmed some of our previous assumptions. Manhattan is the mo
 
 # Assumptions
 
+In our neighborhood analysis, we assume that top 50 neighborhoods for analysis are based on the mean prices and occurences of the properties in these neighborhoods.
+
 # Limitations and Uncertainties
+
+One limitation of using scaled prices is that it is not interpretable since the dependent variable is scaled and the results of regression model are not in actual numbers (as in the original format of dataset).
 
 # Areas of Future Investigation
 
 # References
-
-### IGNORE BELOW FOR NOW
-
-```{r sale_price}
-all.data[get(sale.price.name) == 0, .N]
-all.data[get(sale.price.name) < 50000, .N]
-```
-
-While looking at the data when we were choosing a dataset, we noticed that some sales prices are listed as 0. The documentation for the data claims:
-
-A \$0 sale indicates that there was a transfer of ownership without a cash consideration. There can be a number of reasons for a $0 sale including transfers of ownership from parents to children. 
-
-It may be interesting to look at what kinds of properties are most common in transfers of ownership with no cash consideration, especially since they make up almost a third of our dataset. Furthermore, there are other "weird" values. Such as values of 1 or 10. We'll take a closer look at the types of buildings that list these as their sale price. For now, we will only look at data that has a price of more than 50,000 and continue with our analysis.
-
-
-
-
-Now we will look at the distribution of each borough's sale prices over the years. For this static report, we will focus only on 2003 and 2017 and look at the distribution for each borough. In our Shiny application, we will give the user a chance to look at each year, however, this is just too much variable information to show in a static report.
-
-```{r boxplot_borough}
-box.borough.2017 <- dat[get(sale.year.name) == 2017]
-box.borough.2017$`Sale Year` <- as.factor(box.borough.2017$`Sale Year`)
-
-box.borough.2017.plot <- ggplot(box.borough.2017, aes(x = reorder(`Fixed Borough`, -1*`Log Price`, FUN=median), y = `Log Price`)) +
-                    geom_boxplot() +
-                    xlab("Borough") + ylab("Log Sale Price") + ggtitle("2017 by Borough") +
-                    theme(plot.title = element_text(hjust = 0.5))
-
-box.borough.2017.plot
-
-box.borough.2003 <- dat[get(sale.year.name) == 2003]
-box.borough.2003$`Sale Year` <- as.factor(box.borough.2003$`Sale Year`)
-
-box.borough.2003.plot <- ggplot(box.borough.2003, aes(x = reorder(`Fixed Borough`, -1*`Log Price`, FUN=median), y = `Log Price`)) +
-                    geom_boxplot() +
-                    xlab("Borough") + ylab("Log Sale Price") + ggtitle("2003 by Borough") +
-                    theme(plot.title = element_text(hjust = 0.5))
-
-box.borough.2003.plot
-```
-
-As we can see, the range of values for sale price is enormous. Some areas have buildings with an average price of $2.2 billion! This is because the dataset includes any sale of property. Some properties are one-family homes or walk-up apartments while others are office buildings or retail buildings. The most expensive buildings that are likely office spaces can be found in Downtown or Midtown Manhattan. This makes sense as this is where the corporate side of New York resides.  
-
-We can look at the distribution of the data furthermore by building class code. The class codes can be found here: https://www1.nyc.gov/assets/finance/jump/hlpbldgcode.html. The building class at present and building class at time of sale use these building class codes. First, let's take a look at how many rows there are where these codes are not the same. 
-
-```{r unequal_class_code_num}
-all.data[get(building.class.present.name) != get(building.class.sale.name), .N]
-```
-
-There are `r all.data[get(building.class.present.name) != get(building.class.sale.name), .N]` rows where the building class at present and the building class at time of sale are not the same. For the purposes of visualization and subsetting, we will use the building class at time of sale since we care about the sale price of the property. Now, similar builidng types start with the same letter. For example, building class codes starting with A are one-family homes whereas building class codes starting with B are two-family homes. This means that we can create a new column that is simply the first letter of the building class at the time of sale and this will help us subset our data for visualizations. Based on the documentation, the residential building codes start with: A, B, C, D, and some R. The R codes that don't seem residential are: RA, RB, RG, RH, RK, RP, RS, RT, R0, and R5. Below, we make another data.table with only the residential building class codes at time of sale. 
-
-
-Now we'll look at the distribution of the sales prices faceted on different variables, such as year, building class code, borough, or any combination of these. Again, the Shiny app will have all of these options available for the user. For the purposes of this static report, we looked at the residential distributions by borough in 2009 and 2017.
-
-```{r hist_2017_class}
-hist.data <- residential.properties[get(sale.price.name) < 5000000 & get(sale.year.name) == 2017,]
-res_hist <- ggplot(hist.data, aes(x=as.numeric(`SALE PRICE`))) +
-            geom_histogram(color = "blue", fill = "#99CCFF", bins = 75) +
-            facet_grid(`Building Class First Letter` ~ .) + xlab("Sale Price")
-res_hist
-```
-
-```{r hist_2017_borough}
-hist.data <- residential.properties[get(sale.price.name) < 5000000 & get(sale.year.name) == 2017,]
-res_hist <- ggplot(hist.data, aes(x=as.numeric(`SALE PRICE`))) +
-            geom_histogram(color = "blue", fill = "#99CCFF", bins = 75) +
-            facet_grid(`Fixed Borough` ~ .) + xlab("Sale Price")
-res_hist
-```
-
-A problem we are noticing as we look more and more at the data is that it is never clear if the buyer purchased one unit in the property or if they purchased all the units in the property. For example, one residential property sold for around \$4 billion and had around 8000 units which is about \$500,000 per unit (which would be reasonable). However, other times a property seems to have sold for \$53 million for a single unit. The dataset doesn't provide a lot of information on when a single unit within the property was purchased and when the whole building was purchased. Furthermore, sometimes the unit information is not even present.
-
