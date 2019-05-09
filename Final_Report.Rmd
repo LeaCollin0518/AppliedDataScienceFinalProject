@@ -123,8 +123,10 @@ unique.total.units.group <- all.data[, unique(get(total.units.group.name))]
 unique.land.group <- all.data[, unique(get(land.group.name))]
 scaled.price.name <- "Scaled Price"
 scaled.total.units <- "Scaled Total Units"
+scaled.square.feet <- "Scaled Square Feet"
 all.data[, eval(scaled.price.name) := scale(x = get(sale.price.name))]
 all.data[, eval(scaled.total.units) := scale(x = get(total.units.name))]
+all.data[, eval(scaled.square.feet) := scale(x = get(land.square.feet.name))]
 
 # also taking the log for future graphing
 all.data[, `Log Price` := log(get(sale.price.name))]
@@ -302,6 +304,32 @@ code.plot
 
 There are a few interesting things that stand out from this graph. For one, Manhattan is the only borough that has buldings of type **H** and **L**. Buildings with a class code starting with **H** are generally hotels, motels, or hostels and **L** buildings are lofts. The hotels being sold only in Manhattan isn't too surprising as we know that there are many hotels there and the other boroughs are generally more residential. This doesn't mean that there are no hotels in the other boroughs however, it simply shows that none were **sold** during this 15 year period of time. Buildings with an **R** class code seem to be some of the most popular, but they are also the most varied According to our data source, these properties range from indoor parking and office spaces to condos in buildings with other residential units. Building codes of class **A** are all of the one-family properties and we see that Queens and Staten Island have the highest number of those (Manhattan barely has any). Brooklyn and Queens have almost the same number of **B** properties sold, which are all two-family properties. All of this once again reaffirms our idea that Manhattan is mainly large buildings and the smaller boroughs are more residential. Some of the lowest counts in building class codes are **I** and **W**. **I** codes are for buildings such as nursing homes and hospitals and **W** is for schools and university buildings. 
 
+To further reaffirm the finding that Manhattan has many less one-family and residential properties than the other boroughs, we can also look at tax class.
+
+```{r tax_class_bar, echo = FALSE, fig.height = 8}
+text.sale.borough <- dat[, .N, by = c(tax.class.sale.name, borough.name)]
+
+ggplot(data = text.sale.borough, mapping = aes(x = as.factor(get(tax.class.sale.name)), y = N)) +
+  geom_bar(stat = "identity", color = "blue", fill = "#99CCFF") +
+  labs(x = "Tax Class at time of sale", y = "Number of Cases in each Group") +
+  facet_grid(`Fixed Borough` ~ . ) + theme_gray(base_size = 14)
+```
+
+The most noteworthy feature is that there are far less properties with tax class 1 in Manhattan and properties with tax class 2 in Staten Island. Conversely, there are obviously more properties with tax class 2 in Manhattan. Considering tax class 1 refers to those small residential properties and tax class 2 refers to those properties including cooperatives and condominiums, it is no surprise that the amount of these tax classes differ greatly from Manhattan and Staten Island.
+
+We can see if there is any relationship now between tax class at sale price. 
+
+```{r tax_class_box, echo = FALSE}
+
+tax.box.plot <- ggplot(data = dat, aes(x = reorder(as.factor(get(tax.class.sale.name)), -1*`Log Price`, FUN=median), y = get(log.price.name))) +
+  geom_boxplot(fill = "#99CCFF") +
+  labs(x = "Tax class at Time of Sale", y = "Log Sale Price") + theme_gray(base_size = 15)
+
+tax.box.plot
+```
+
+We plot the log of the sale price here since the scale is so large. We see that buildings in the 3 tax class have the highest median price. This tax class is described by the data source as: includes property with equipment owned by a gas, telephone or electric company.  We see that tax class 2 and 1 have prices concentrated over a relatively small range of values compared to tax class 3. 
+
 We also looked at the relationship between price per square foot and borough. Because many data points did not have square footage listed or had nonsensical values for gross square feet (ie 1), we decided to only plot residential properties. 
 
 ```{r mean_median, echo = F, fig.width = 10}
@@ -352,15 +380,6 @@ price_year
 
 In general, the price per square foot in New York city was rising over the 15 years, from about \$250 to about \$400. The most expensive borough is always Manhattan. We see that in 2006, the price in Manhattan is much higher than the other 4 boroughs. The least expensive borough is always the Bronx. The effect of the financial crisis is not too noticeable in the "Overall" line. Even when we look at each borough, the effect is still only drastically seen in Manhattan. From 2008 to 2009 there is a sharp drop in the price per square foot in Manhattan. These drops could be because most of the costumers for real estate in Manhattan are investors, bankers, business men or financial firms and they are also the ones who lost the most during the financail crisis. We also notice that the price per square foot between the boroughs is more similar in the first three years than in the later years of the data. By checking data provided by [Barach College](https://www.baruch.cuny.edu/nycdata/consumer_prices/cpi.htm), CPI in New York in New York raised from 197.8 in 2003 to 268.5 in 2017, which may magnify the gap amonst housing prices in different boroughs. 
 
-```{r tax_class_box, echo = FALSE}
-
-tax.box.plot <- ggplot(data = dat, aes(x = reorder(as.factor(get(tax.class.sale.name)), -1*`Log Price`, FUN=median), y = get(log.price.name))) +
-  geom_boxplot(fill = "#99CCFF") +
-  labs(x = "Tax class at Time of Sale", y = "Log Sale Price") + theme_gray(base_size = 15)
-
-tax.box.plot
-```
-
 Now we zoom in a bit more and look at how zip code (and therefore neighborhood) affect sale price. We have a choropleth map for the overall dataset shown below. We only look at the data for 2017 for simplicity in this static report. In our interactive component, we have two choropleth maps side-by-side where the user can choose two different years to better see if trends have changed over the years in each neighborhood. In the application, the user can additionally choose which building classes to include. 
 
 ```{r choropleth_map, echo = FALSE}
@@ -377,7 +396,39 @@ graph.choropleth(residential.properties, 2017)
 
 Now that we are only including residential properties, the sales prices are easier to compare between parts of New York. Not surprisingly, many of the most expensive properites are in Manhattan. We see that Staten Island and the Bronx are probably the most affordable. Brooklyn and Queens are also more affordable except the parts that are closest to Manhattan are pricier. Even within Manhattan we see trends that make sense. Midtown and Downtown Manhattan see much higher average prices than anything at or above Central Park. 
 
-## Binning Total Units and Land Square Feet 
+Now we'll take a look at how the total number of units and the square footage affect price. Without loss of generality, we will mainly focus on total units and land square feet here (and in fact the `total units` is just the sum of the residential units and commercial).
+
+```{r scatter_unit_square.feet_1, echo = FALSE}
+ggplot(data = dat) +
+  geom_point(mapping = aes(x = get(scaled.total.units), y = get(scaled.price.name))) +
+  labs(title = "Scaled NYC Real Estate Price by Total Units", x = "Scaled Total Units", y = "Scaled Sale Price")
+```
+
+```{r land_scatter, echo = FALSE}
+ggplot(data = dat) +
+  geom_point(mapping = aes(x = get(scaled.square.feet), y = get(scaled.price.name))) +
+  labs(title = "Scaled NYC Real Estate Price by Land Square feet", x = "Scaled Land Square Feet", y = "Scaled Sale Price")
+```
+
+From these graphs, we see that a few points are outliers. We also see that most of the data is concentrated in the bottom left. Because of this, we're subsetting the data so that total units is greater than 0 and less than 5000, the land square feet is greater than 0 and less than 50,000,000, and sale price is greater than 50,000 and less than 5,000,000.
+
+```{r scatter_unit_square.feet_2, echo = FALSE}
+sub.data.unit.feet <- all.data[get(total.units.name) > 0 & get(total.units.name) < 5000 & get(land.square.feet.name) > 0 & get(land.square.feet.name) < 50000000 & get(sale.price.name) > 50000 & get(sale.price.name) < 5000000, ]
+ggplot(data = sub.data.unit.feet) +
+  geom_point(mapping = aes(x = get(scaled.total.units), y = get(scaled.price.name))) +
+  labs(title = "Scaled NYC Real Estate Price by Total Units", x = " Scaled Total Units", y = "Scaled Sale Price")
+```
+
+```{r scatter_scaled, echo = FALSE}
+scatter_sub_scaled <- ggplot(data = sub.data.unit.feet) +
+  geom_point(mapping = aes(x = get(scaled.square.feet), y = get(scaled.price.name))) +
+  labs(title = "Scaled NYC Real Estate Price by Land Square feet", x = "Scaled Land Square Feet", y = "Scaled Sale Price")
+scatter_sub_scaled
+```
+
+We now see a slight positive correlation between total units and price and land square footage and price, but it is very slight. 
+
+Now we turn our attention to the count of the different number of total units and land square footage. We binned these values since there were not many distinct values and so that we could use a bar plot as our visualization.
 
 ```{r barplot_unit_square.feet_num, echo = FALSE, warning = FALSE}
 unit.Num <- all.data[, .N, by = total.units.group.name]
@@ -395,50 +446,7 @@ ggplot(data = land.Num, mapping = aes(x = get(land.group.name), y = N)) +
   theme(axis.text.x = element_text(angle = 45, hjust = 1))
 ```
 
-## Inspecting Logarithm of Price
-
-```{r boxplot_unit_square.feet_price, echo = FALSE, warning = FALSE, cache = TRUE}
-ggplot(data = dat, aes(x = get(total.units.group.name), y = get(log.price.name))) +
-  geom_boxplot(fill = "#99CCFF") +
-  labs(title = "Logarithm of NYC Real Estate Price by Total Units", x = "Group of Total Units", y = "Log Sale Price") +
-  theme(axis.text.x = element_text(angle = 45, hjust = 1))
-```
-
-```{r box_land_square, echo = FALSE, cache = TRUE}
-ggplot(data = dat, aes(x = get(land.group.name), y = get(log.price.name))) +
-  geom_boxplot(fill = "#99CCFF") +
-  labs(title = "Logarithm of NYC Real Estate Price by Land Square Feet", x = "Group of Land Square Feet", y = "Log Sale Price") +
-  theme(axis.text.x = element_text(angle = 45, hjust = 1))
-```
-
-## Correlation Between Price and Land Square Feet
-
-```{r scatter_unit_square.feet_1, echo = FALSE, cache = TRUE}
-ggplot(data = dat) +
-  geom_point(mapping = aes(x = get(total.units.name), y = get(scaled.price.name))) +
-  labs(title = "Scaled NYC Real Estate Price by Total Units", x = "Total Units", y = "Scaled Sale Price")
-```
-
-```{r land_scatter, echo = FALSE, cache = TRUE}
-ggplot(data = dat) +
-  geom_point(mapping = aes(x = get(land.square.feet.name), y = get(scaled.price.name))) +
-  labs(title = "Scaled NYC Real Estate Price by Land Square feet", x = "Land Square Feet", y = "Scaled Sale Price")
-```
-
-## Correlation on a Subset
-
-```{r scatter_unit_square.feet_2, echo = FALSE, cache = TRUE}
-sub.data.unit.feet <- all.data[get(total.units.name) > 0 & get(total.units.name) < 5000 & get(land.square.feet.name) > 0 & get(land.square.feet.name) < 50000000 & get(sale.price.name) > 50000 & get(sale.price.name) < 5000000, ]
-ggplot(data = sub.data.unit.feet) +
-  geom_point(mapping = aes(x = get(total.units.name), y = get(scaled.price.name))) +
-  labs(title = "Scaled NYC Real Estate Price by Total Units", x = "Total Units", y = "Scaled Sale Price")
-```
-
-```{r scatter_scaled, echo = FALSE, cache= TRUE}
-ggplot(data = sub.data.unit.feet) +
-  geom_point(mapping = aes(x = get(land.square.feet.name), y = get(scaled.price.name))) +
-  labs(title = "Scaled NYC Real Estate Price by Land Square feet", x = "Land Square Feet", y = "Scaled Sale Price")
-```
+One interesting thing here is that most of the properties have total units lower than 5; however the bar plot tells us that the difference in price is mainly reflected in the group of total units higher than 5. Another interesting finding is that there is an obvious gap between the first group and the third when we are considering land square footage. It may be because the data actually splits nicely into properties that are smaller and residential and properties that are more commercial. We thought it may be reasonable to split the data into two large groups (small properties vs. large) but then we see from that the scatter plot that land square footage is not so predictive. We hold out for our linear regression models for further analysis.
 
 # Interpretation
 
